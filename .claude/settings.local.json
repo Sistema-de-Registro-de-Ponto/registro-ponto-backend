@@ -1,17 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(java -version)",
-      "Bash(mvn -version)",
-      "Bash(\"C:/Program Files/Common Files/Oracle/Java/javapath/java.exe\" -version)",
-      "Bash(\"C:/Program Files/Java/jdk-25.0.2/bin/java.exe\" -version)",
+      "Bash(java *)",
+      "Bash(mvn *)",
       "PowerShell(java *)",
-      "PowerShell(Get-Command *)",
       "PowerShell(mvn *)",
+      "PowerShell($env:JAVA_HOME = *)",
+      "PowerShell(& \"*)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Select-String *)",
       "PowerShell(Test-NetConnection *)",
-      "PowerShell(Invoke-RestMethod -Uri http://localhost:8080/health -Method GET | ConvertTo-Json)",
-      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-25.0.2\"; $env:DB_PORT = \"3370\"; $env:DB_USER = \"admin\"; $env:DB_PASSWORD = \"admin\"; & \"C:\\\\maven\\\\bin\\\\mvn.cmd\" spring-boot:run 2>&1)",
-      "PowerShell(psql *)"
+      "PowerShell(Invoke-RestMethod *)",
+      "PowerShell(psql *)",
+      "PowerShell(Write-Host *)",
+      "WebFetch(domain:projectlombok.org)"
     ]
   }
 }

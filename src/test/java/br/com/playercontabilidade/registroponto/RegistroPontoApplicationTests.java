@@ -6,8 +6,12 @@ import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
 @TestPropertySource(properties = {
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
-                "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+        "spring.datasource.url=jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+        "spring.jpa.hibernate.ddl-auto=create-drop"
 })
 class RegistroPontoApplicationTests {
 
