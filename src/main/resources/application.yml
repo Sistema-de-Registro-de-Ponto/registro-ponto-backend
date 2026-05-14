@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: registro-ponto-backend
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3370}/${DB_NAME:registro_ponto}?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Sao_Paulo&allowPublicKeyRetrieval=true
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:admin}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+server:
+  port: ${SERVER_PORT:8080}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:troque-este-segredo-em-producao-precisa-de-pelo-menos-256-bits-para-HS256}
+      expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
