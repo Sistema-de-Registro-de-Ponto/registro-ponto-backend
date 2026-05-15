@@ -14,6 +14,14 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(ColaboratorNotFoundException.class)
+    public ProblemDetail handleColaboratorNotFound(ColaboratorNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Colaborador não encontrado");
+        return problem;
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

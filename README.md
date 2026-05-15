@@ -55,7 +55,7 @@ Dois usuários são criados automaticamente no startup pelo `DataSeeder`, caso a
 | `colaborador` | `12345678`  | `COLLABORATOR` |
 | `gerente`     | `87654321`  | `MANAGER`      |
 
-A senha é armazenada como hash BCrypt; o seed é idempotente (não duplica se já existir).
+A senha é armazenada como hash BCrypt; o seed é idempotente (não duplica usuário nem colaborador se já existirem). Para cada usuário de teste é criada uma linha em `colaborators` com `first_name` (`Natanael` / `Gerente`) quando ainda não existir.
 
 ### Fluxo da aplicação
 
@@ -75,6 +75,9 @@ Endpoints públicos (sem token): `POST /auth/login`, `/health`, Swagger UI/JSON.
 |--------|-----------------|--------|-------------------------------------------------------------------|
 | POST   | `/auth/login`   | nenhum | Recebe credenciais e devolve `{ token, tokenType }`               |
 | GET    | `/auth/me`      | Bearer | Devolve `{ username, roles }` do usuário identificado pelo token  |
+| GET    | `/v1/colaborator` | Bearer | Devolve `{ user_id, first_name }` do registro em `colaborators` ligado ao usuário do token |
+
+O token JWT continua identificando o usuário pelo **username** (claim `sub`); o endpoint consulta a tabela `colaborators` pelo `user_id` correspondente. Se o usuário existir mas não houver linha de colaborador, a API responde **404** (`ProblemDetail`).
 
 Validações de entrada em `POST /auth/login`:
 
@@ -98,6 +101,15 @@ curl http://localhost:8080/auth/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
+**Exemplo de perfil do colaborador autenticado:**
+
+```bash
+curl http://localhost:8080/v1/colaborator \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael"}` (valores conforme o banco e o seed).
+
 ### Testes
 
 A suíte usa **H2 em memória** (modo MySQL) para os testes que precisam de banco. Para rodar:
@@ -110,4 +122,5 @@ Para rodar uma classe específica:
 
 ```powershell
 mvn test -Dtest=AuthControllerTest
+mvn test -Dtest=ColaboratorControllerTest
 ```
