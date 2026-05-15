@@ -162,10 +162,11 @@ Resposta esperada: `{"id":1,"description":"Revisar relatórios contábeis","crea
 
 Registram o **check-in** (início da jornada) do colaborador autenticado. O horário de entrada (`started_at`) é definido automaticamente no servidor. As atividades do backlog (`planned_activities` do colaborador) são vinculadas à jornada na tabela de associação `journey_planned_activities`, com cópia da `description` e `checked` inicial `false`.
 
-| Método | Endpoint               | Auth   | Descrição                                                                 |
-|--------|------------------------|--------|---------------------------------------------------------------------------|
-| GET    | `/v1/journeys/current` | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
-| POST   | `/v1/journeys`         | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
+| Método | Endpoint                       | Auth   | Descrição                                                                 |
+|--------|--------------------------------|--------|---------------------------------------------------------------------------|
+| GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
+| POST   | `/v1/journeys`                 | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
+| POST   | `/v1/journeys/activities/planned/{journey_planned_activity_id}` | Bearer | Marca/desmarca item: URL com o `id` do vínculo; body `{ "checked" }` → mesmo formato de um elemento de `planned_activities` (200) |
 
 Modelo de dados:
 
@@ -177,7 +178,8 @@ Regras:
 - Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
 - `GET /v1/journeys/current` sem jornada ativa retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
 - O backlog em `/v1/activities/planned` **não é removido** no check-in; o CRUD de atividades planejadas permanece igual.
-- Marcar atividade como concluída (`checked: true`) e finalizar jornada (`completed`, `ended_at`) serão tratados em features futuras.
+- Para marcar ou desmarcar um item vinculado à jornada em andamento, use `POST /v1/journeys/activities/planned/{journey_planned_activity_id}` com o `id` de cada elemento em `planned_activities` na URL e body `{ "checked": true|false }`.
+- Finalizar jornada (`completed`, `ended_at`) será tratado em feature futura.
 
 Resposta esperada (201):
 
@@ -216,6 +218,23 @@ curl -X POST http://localhost:8080/v1/journeys \
   -d '{}'
 ```
 
+O segmento `journey_planned_activity_id` na URL é o `id` retornado em `planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
+
+Validações do body de marcação:
+
+- `checked`: obrigatório (boolean)
+
+**Exemplo — marcar atividade como feita:**
+
+```bash
+curl -X POST http://localhost:8080/v1/journeys/activities/planned/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"checked":true}'
+```
+
+Resposta esperada (200): `{"id":1,"planned_activity_id":3,"description":"Revisar relatórios contábeis","checked":true}`
+
 ### Testes
 
 A suíte usa **H2 em memória** (modo MySQL) para os testes que precisam de banco. Para rodar:
@@ -231,4 +250,5 @@ mvn test -Dtest=AuthControllerTest
 mvn test -Dtest=ColaboratorControllerTest
 mvn test -Dtest=PlannedActivityControllerTest
 mvn test -Dtest=JourneyControllerTest
+mvn test -Dtest=JourneyPlannedActivityControllerTest
 ```

@@ -10,7 +10,9 @@ import br.com.playercontabilidade.registroponto.entity.PlannedActivity;
 import br.com.playercontabilidade.registroponto.exception.ColaboratorNotFoundException;
 import br.com.playercontabilidade.registroponto.exception.JourneyAlreadyInProgressException;
 import br.com.playercontabilidade.registroponto.exception.JourneyNotFoundException;
+import br.com.playercontabilidade.registroponto.exception.JourneyPlannedActivityNotFoundException;
 import br.com.playercontabilidade.registroponto.repository.ColaboratorRepository;
+import br.com.playercontabilidade.registroponto.repository.JourneyPlannedActivityRepository;
 import br.com.playercontabilidade.registroponto.repository.JourneyRepository;
 import br.com.playercontabilidade.registroponto.repository.PlannedActivityRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class JourneyService {
     private final ColaboratorRepository colaboratorRepository;
     private final PlannedActivityRepository plannedActivityRepository;
     private final JourneyRepository journeyRepository;
+    private final JourneyPlannedActivityRepository journeyPlannedActivityRepository;
     private final AppTimeService appTimeService;
 
     @Transactional
@@ -69,6 +72,25 @@ public class JourneyService {
                 .orElseThrow(() -> new JourneyNotFoundException(
                         "Não há jornada em andamento para este colaborador."));
         return toResponse(journey);
+    }
+
+    @Transactional
+    public JourneyPlannedActivityItemResponse updateJourneyPlannedActivityChecked(
+            String username,
+            Long journeyPlannedActivityId,
+            boolean checked) {
+        Colaborator colaborator = resolveColaborator(username);
+        JourneyPlannedActivity item = journeyPlannedActivityRepository
+                .findByIdAndJourney_Colaborator_IdAndJourney_EndedAtIsNullAndJourney_Status(
+                        journeyPlannedActivityId,
+                        colaborator.getId(),
+                        JourneyStatus.IN_PROGRESS)
+                .orElseThrow(() -> new JourneyPlannedActivityNotFoundException(
+                        "Atividade da jornada não encontrada ou a jornada não está em andamento."));
+
+        item.setChecked(checked);
+        JourneyPlannedActivity saved = journeyPlannedActivityRepository.save(item);
+        return toItemResponse(saved);
     }
 
     private Colaborator resolveColaborator(String username) {

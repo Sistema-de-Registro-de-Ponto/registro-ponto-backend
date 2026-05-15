@@ -30,6 +30,14 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(JourneyPlannedActivityNotFoundException.class)
+    public ProblemDetail handleJourneyPlannedActivityNotFound(JourneyPlannedActivityNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Atividade da jornada não encontrada");
+        return problem;
+    }
+
     @ExceptionHandler(JourneyAlreadyInProgressException.class)
     public ProblemDetail handleJourneyAlreadyInProgress(JourneyAlreadyInProgressException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
