@@ -158,6 +158,64 @@ curl -X DELETE http://localhost:8080/v1/activities/planned/1 \
 
 Resposta esperada: `{"id":1,"description":"Revisar relatórios contábeis","created_at":"2026-05-15T11:30:00-03:00"}`
 
+### Endpoints de jornadas
+
+Registram o **check-in** (início da jornada) do colaborador autenticado. O horário de entrada (`started_at`) é definido automaticamente no servidor. As atividades do backlog (`planned_activities` do colaborador) são vinculadas à jornada na tabela de associação `journey_planned_activities`, com cópia da `description` e `checked` inicial `false`.
+
+| Método | Endpoint               | Auth   | Descrição                                                                 |
+|--------|------------------------|--------|---------------------------------------------------------------------------|
+| GET    | `/v1/journeys/current` | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
+| POST   | `/v1/journeys`         | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
+
+Modelo de dados:
+
+- `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null até finalizar), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
+- `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), `checked`
+
+Regras:
+
+- Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
+- `GET /v1/journeys/current` sem jornada ativa retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
+- O backlog em `/v1/activities/planned` **não é removido** no check-in; o CRUD de atividades planejadas permanece igual.
+- Marcar atividade como concluída (`checked: true`) e finalizar jornada (`completed`, `ended_at`) serão tratados em features futuras.
+
+Resposta esperada (201):
+
+```json
+{
+  "id": 1,
+  "collaborator_id": 1,
+  "started_at": "2026-05-15T08:00:00-03:00",
+  "status": "in_progress",
+  "planned_activities": [
+    {
+      "id": 1,
+      "planned_activity_id": 3,
+      "description": "Revisar relatórios contábeis",
+      "checked": false
+    }
+  ],
+  "created_at": "2026-05-15T08:00:00-03:00",
+  "updated_at": "2026-05-15T08:00:00-03:00"
+}
+```
+
+**Exemplo — consultar jornada em andamento:**
+
+```bash
+curl http://localhost:8080/v1/journeys/current \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+**Exemplo — iniciar jornada:**
+
+```bash
+curl -X POST http://localhost:8080/v1/journeys \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
 ### Testes
 
 A suíte usa **H2 em memória** (modo MySQL) para os testes que precisam de banco. Para rodar:
@@ -172,4 +230,5 @@ Para rodar uma classe específica:
 mvn test -Dtest=AuthControllerTest
 mvn test -Dtest=ColaboratorControllerTest
 mvn test -Dtest=PlannedActivityControllerTest
+mvn test -Dtest=JourneyControllerTest
 ```

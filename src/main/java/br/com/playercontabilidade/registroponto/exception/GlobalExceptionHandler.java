@@ -30,6 +30,22 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(JourneyAlreadyInProgressException.class)
+    public ProblemDetail handleJourneyAlreadyInProgress(JourneyAlreadyInProgressException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, e.getMessage());
+        problem.setTitle("Jornada em andamento");
+        return problem;
+    }
+
+    @ExceptionHandler(JourneyNotFoundException.class)
+    public ProblemDetail handleJourneyNotFound(JourneyNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Jornada não encontrada");
+        return problem;
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
