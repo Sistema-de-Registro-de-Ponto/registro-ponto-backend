@@ -22,6 +22,14 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(PlannedActivityNotFoundException.class)
+    public ProblemDetail handlePlannedActivityNotFound(PlannedActivityNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Atividade planejada não encontrada");
+        return problem;
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

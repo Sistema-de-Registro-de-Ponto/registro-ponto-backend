@@ -26,6 +26,9 @@ Backend para registro de ponto — Player Contabilidade.
 | `SERVER_PORT`       | `8080`                               | Porta da aplicação                 |
 | `JWT_SECRET`        | (valor placeholder — troque em prod) | Segredo HS256 (>= 256 bits)        |
 | `JWT_EXPIRATION_MS` | `86400000`                           | Validade do token (ms)             |
+| `APP_TIME_ZONE`     | `America/Sao_Paulo`                  | Fuso da aplicação (API, Jackson e `AppTimeService`) |
+
+Datas na API são convertidas via `AppTimeService` (injete em qualquer service). O banco continua em UTC (`Instant`); na resposta JSON o horário sai com offset do fuso configurado (ex.: `-03:00`).
 
 ### Execução do backend
 
@@ -110,6 +113,51 @@ curl http://localhost:8080/v1/colaborator \
 
 Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael"}` (valores conforme o banco e o seed).
 
+### Endpoints de atividades planejadas
+
+Permitem ao colaborador informar o que pretende fazer **antes de iniciar a jornada**. Cada registro fica na tabela `planned_activities` (`id`, `collaborator_id`, `description`, `created_at`, `updated_at`), sempre vinculado ao colaborador do token JWT.
+
+| Método | Endpoint                         | Auth   | Descrição                                              |
+|--------|----------------------------------|--------|--------------------------------------------------------|
+| POST   | `/v1/activities/planned`         | Bearer | Cria atividade: body `{ "description" }` → `{ id, description, created_at }` (201) |
+| GET    | `/v1/activities/planned`         | Bearer | Lista atividades do colaborador autenticado: `[ { id, description, created_at }, ... ]` |
+| DELETE | `/v1/activities/planned/{id}`    | Bearer | Remove atividade do colaborador → `{ id, description, created_at }` |
+
+O `collaborator_id` é resolvido internamente pelo username do token; o cliente não envia esse campo. Só é possível listar ou excluir atividades do próprio colaborador. Atividade inexistente ou de outro colaborador retorna **404** (`ProblemDetail`).
+
+Validações em `POST /v1/activities/planned`:
+
+- `description`: obrigatório, não vazio, até 500 caracteres
+
+**Exemplo — criar atividade planejada:**
+
+```bash
+curl -X POST http://localhost:8080/v1/activities/planned \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Revisar relatórios contábeis"}'
+```
+
+Resposta esperada (201): `{"id":1,"description":"Revisar relatórios contábeis","created_at":"2026-05-15T11:30:00-03:00"}` (`created_at` em ISO-8601, fuso `America/Sao_Paulo`)
+
+**Exemplo — listar:**
+
+```bash
+curl http://localhost:8080/v1/activities/planned \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada: `[{"id":1,"description":"Revisar relatórios contábeis","created_at":"2026-05-15T11:30:00-03:00"}]`
+
+**Exemplo — remover:**
+
+```bash
+curl -X DELETE http://localhost:8080/v1/activities/planned/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada: `{"id":1,"description":"Revisar relatórios contábeis","created_at":"2026-05-15T11:30:00-03:00"}`
+
 ### Testes
 
 A suíte usa **H2 em memória** (modo MySQL) para os testes que precisam de banco. Para rodar:
@@ -123,4 +171,5 @@ Para rodar uma classe específica:
 ```powershell
 mvn test -Dtest=AuthControllerTest
 mvn test -Dtest=ColaboratorControllerTest
+mvn test -Dtest=PlannedActivityControllerTest
 ```
