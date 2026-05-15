@@ -17,6 +17,7 @@ import org.springframework.web.context.WebApplicationContext;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -67,36 +68,36 @@ class JourneyPlannedActivityControllerTest {
                 .andReturn().getResponse().getContentAsString();
 
         long journeyPlannedActivityId = objectMapper.readTree(journeyBody)
-                .get("planned_activities").get(0).get("id").asLong();
+                .get("journey_planned_activities").get(0).get("id").asLong();
         long plannedActivityId = objectMapper.readTree(journeyBody)
-                .get("planned_activities").get(0).get("planned_activity_id").asLong();
+                .get("journey_planned_activities").get(0).get("planned_activity_id").asLong();
 
-        mockMvc.perform(post("/v1/journeys/activities/planned/" + journeyPlannedActivityId)
+        mockMvc.perform(put("/v1/journeys/activities/planned/" + journeyPlannedActivityId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"checked\":true}"))
+                        .content("{\"is_checked\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(journeyPlannedActivityId))
                 .andExpect(jsonPath("$.planned_activity_id").value(plannedActivityId))
                 .andExpect(jsonPath("$.description").value("Revisar relatórios"))
-                .andExpect(jsonPath("$.checked").value(true));
+                .andExpect(jsonPath("$.is_checked").value(true));
 
-        mockMvc.perform(post("/v1/journeys/activities/planned/" + journeyPlannedActivityId)
+        mockMvc.perform(put("/v1/journeys/activities/planned/" + journeyPlannedActivityId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"checked\":false}"))
+                        .content("{\"is_checked\":false}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.checked").value(false));
+                .andExpect(jsonPath("$.is_checked").value(false));
     }
 
     @Test
     void deveRetornar404QuandoItemNaoPertenceAJornadaAtiva() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys/activities/planned/99999")
+        mockMvc.perform(put("/v1/journeys/activities/planned/99999")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"checked\":true}"))
+                        .content("{\"is_checked\":true}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Atividade da jornada não encontrada"));
     }
@@ -105,7 +106,7 @@ class JourneyPlannedActivityControllerTest {
     void deveRetornar400QuandoCorpoInvalido() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys/activities/planned/1")
+        mockMvc.perform(put("/v1/journeys/activities/planned/1")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -114,15 +115,15 @@ class JourneyPlannedActivityControllerTest {
 
     @Test
     void deveRetornar401SemToken() throws Exception {
-        mockMvc.perform(post("/v1/journeys/activities/planned/1")
+        mockMvc.perform(put("/v1/journeys/activities/planned/1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"checked\":true}"))
+                        .content("{\"is_checked\":true}"))
                 .andExpect(status().isUnauthorized());
     }
 
     private String loginAndGetToken(String username, String password) throws Exception {
         LoginRequest body = new LoginRequest(username, password);
-        String responseBody = mockMvc.perform(post("/auth/login")
+        String responseBody = mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())

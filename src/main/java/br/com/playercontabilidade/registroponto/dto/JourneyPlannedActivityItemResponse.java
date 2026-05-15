@@ -6,6 +6,6 @@ public record JourneyPlannedActivityItemResponse(
         Long id,
         @JsonProperty("planned_activity_id") Long plannedActivityId,
         String description,
-        boolean checked
+        @JsonProperty("is_checked") boolean isChecked
 ) {
 }

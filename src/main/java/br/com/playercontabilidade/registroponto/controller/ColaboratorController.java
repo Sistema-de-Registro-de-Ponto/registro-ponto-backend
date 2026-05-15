@@ -19,7 +19,7 @@ public class ColaboratorController {
 
     private final ColaboratorService colaboratorService;
 
-    @GetMapping("/colaborator")
+    @GetMapping("/collaborator")
     @Operation(
             summary = "Perfil do colaborador autenticado",
             description = "Retorna o identificador do usuário e o primeiro nome cadastrado na tabela colaborators."

@@ -64,25 +64,24 @@ A senha é armazenada como hash BCrypt; o seed é idempotente (não duplica usu�
 
 A autenticação é **stateless via JWT** (HS256, biblioteca `jjwt`):
 
-1. Cliente envia `POST /auth/login` com `{ "username", "password" }`.
+1. Cliente envia `POST /v1/auth/login` com `{ "username", "password" }`.
 2. `AuthenticationManager` valida a senha contra o hash BCrypt do banco através do `CustomUserDetailsService`.
 3. Em caso de sucesso, o `JwtService` gera um token com claims `sub`, `roles`, `iat`, `exp`.
 4. Em requests subsequentes, o cliente envia o token no header `Authorization: Bearer <token>`.
 5. O `JwtAuthenticationFilter` valida o token a cada request e popula o `SecurityContext` com o `UserDetails`.
 
-Endpoints públicos (sem token): `POST /auth/login`, `/health`, Swagger UI/JSON. Qualquer outro endpoint exige token JWT válido — sem token ou com token inválido retorna **401**; com role insuficiente retorna **403**.
+Endpoints públicos (sem token): `POST /v1/auth/login`, `/health`, Swagger UI/JSON. Qualquer outro endpoint exige token JWT válido — sem token ou com token inválido retorna **401**; com role insuficiente retorna **403**.
 
 ### Endpoints de autenticação
 
 | Método | Endpoint        | Auth   | Descrição                                                         |
 |--------|-----------------|--------|-------------------------------------------------------------------|
-| POST   | `/auth/login`   | nenhum | Recebe credenciais e devolve `{ token, tokenType }`               |
-| GET    | `/auth/me`      | Bearer | Devolve `{ username, roles }` do usuário identificado pelo token  |
-| GET    | `/v1/colaborator` | Bearer | Devolve `{ user_id, first_name }` do registro em `colaborators` ligado ao usuário do token |
+| POST   | `/v1/auth/login`   | nenhum | Recebe credenciais e devolve `{ token, tokenType }`               |
+| GET    | `/v1/collaborator` | Bearer | Devolve `{ user_id, first_name }` do registro em `colaborators` ligado ao usuário do token |
 
 O token JWT continua identificando o usuário pelo **username** (claim `sub`); o endpoint consulta a tabela `colaborators` pelo `user_id` correspondente. Se o usuário existir mas não houver linha de colaborador, a API responde **404** (`ProblemDetail`).
 
-Validações de entrada em `POST /auth/login`:
+Validações de entrada em `POST /v1/auth/login`:
 
 - `username`: obrigatório, apenas letras (`^[A-Za-z]+$`)
 - `password`: obrigatório, exatamente 8 dígitos numéricos (`^\d{8}$`)
@@ -92,22 +91,15 @@ Violações de formato retornam **400**; credenciais inválidas retornam **401**
 **Exemplo de login:**
 
 ```bash
-curl -X POST http://localhost:8080/auth/login \
+curl -X POST http://localhost:8080/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"colaborador","password":"12345678"}'
-```
-
-**Exemplo de uso do token em endpoint protegido:**
-
-```bash
-curl http://localhost:8080/auth/me \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
 **Exemplo de perfil do colaborador autenticado:**
 
 ```bash
-curl http://localhost:8080/v1/colaborator \
+curl http://localhost:8080/v1/collaborator \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
@@ -160,25 +152,25 @@ Resposta esperada: `{"id":1,"description":"Revisar relatórios contábeis","crea
 
 ### Endpoints de jornadas
 
-Registram o **check-in** (início da jornada) do colaborador autenticado. O horário de entrada (`started_at`) é definido automaticamente no servidor. As atividades do backlog (`planned_activities` do colaborador) são vinculadas à jornada na tabela de associação `journey_planned_activities`, com cópia da `description` e `checked` inicial `false`.
+Registram o **check-in** (início da jornada) do colaborador autenticado. O horário de entrada (`started_at`) é definido automaticamente no servidor. As atividades do backlog (`planned_activities` do colaborador) são vinculadas à jornada na tabela de associação `journey_planned_activities`, com cópia da `description` e `is_checked` inicial `false` no JSON da API (coluna interna `checked`).
 
 | Método | Endpoint                       | Auth   | Descrição                                                                 |
 |--------|--------------------------------|--------|---------------------------------------------------------------------------|
 | GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
 | POST   | `/v1/journeys`                 | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
-| POST   | `/v1/journeys/activities/planned/{journey_planned_activity_id}` | Bearer | Marca/desmarca item: URL com o `id` do vínculo; body `{ "checked" }` → mesmo formato de um elemento de `planned_activities` (200) |
+| PUT    | `/v1/journeys/activities/planned/{id}` | Bearer | Marca/desmarca item: URL com o `id` do vínculo; body `{ "is_checked" }` → mesmo formato de um elemento de `journey_planned_activities` (200) |
 
 Modelo de dados:
 
 - `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null até finalizar), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
-- `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), `checked`
+- `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), coluna `checked` (mapeada no JSON como `is_checked`)
 
 Regras:
 
 - Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
 - `GET /v1/journeys/current` sem jornada ativa retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
 - O backlog em `/v1/activities/planned` **não é removido** no check-in; o CRUD de atividades planejadas permanece igual.
-- Para marcar ou desmarcar um item vinculado à jornada em andamento, use `POST /v1/journeys/activities/planned/{journey_planned_activity_id}` com o `id` de cada elemento em `planned_activities` na URL e body `{ "checked": true|false }`.
+- Para marcar ou desmarcar um item vinculado à jornada em andamento, use `PUT /v1/journeys/activities/planned/{id}` com o `id` de cada elemento em `journey_planned_activities` na URL e body `{ "is_checked": true|false }`.
 - Finalizar jornada (`completed`, `ended_at`) será tratado em feature futura.
 
 Resposta esperada (201):
@@ -189,12 +181,12 @@ Resposta esperada (201):
   "collaborator_id": 1,
   "started_at": "2026-05-15T08:00:00-03:00",
   "status": "in_progress",
-  "planned_activities": [
+  "journey_planned_activities": [
     {
       "id": 1,
       "planned_activity_id": 3,
       "description": "Revisar relatórios contábeis",
-      "checked": false
+      "is_checked": false
     }
   ],
   "created_at": "2026-05-15T08:00:00-03:00",
@@ -218,22 +210,22 @@ curl -X POST http://localhost:8080/v1/journeys \
   -d '{}'
 ```
 
-O segmento `journey_planned_activity_id` na URL é o `id` retornado em `planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
+O segmento `{id}` na URL é o `id` retornado em `journey_planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
 
 Validações do body de marcação:
 
-- `checked`: obrigatório (boolean)
+- `is_checked`: obrigatório (boolean)
 
 **Exemplo — marcar atividade como feita:**
 
 ```bash
-curl -X POST http://localhost:8080/v1/journeys/activities/planned/1 \
+curl -X PUT http://localhost:8080/v1/journeys/activities/planned/1 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
   -H "Content-Type: application/json" \
-  -d '{"checked":true}'
+  -d '{"is_checked":true}'
 ```
 
-Resposta esperada (200): `{"id":1,"planned_activity_id":3,"description":"Revisar relatórios contábeis","checked":true}`
+Resposta esperada (200): `{"id":1,"planned_activity_id":3,"description":"Revisar relatórios contábeis","is_checked":true}`
 
 ### Testes
 

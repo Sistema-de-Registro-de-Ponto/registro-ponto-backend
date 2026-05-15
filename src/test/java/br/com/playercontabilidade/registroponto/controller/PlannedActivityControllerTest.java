@@ -112,7 +112,7 @@ class PlannedActivityControllerTest {
 
     private String loginAndGetToken(String username, String password) throws Exception {
         LoginRequest body = new LoginRequest(username, password);
-        String responseBody = mockMvc.perform(post("/auth/login")
+        String responseBody = mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())

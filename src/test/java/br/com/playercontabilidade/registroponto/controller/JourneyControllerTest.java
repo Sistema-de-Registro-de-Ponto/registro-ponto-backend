@@ -72,13 +72,13 @@ class JourneyControllerTest {
                 .andExpect(jsonPath("$.status").value("in_progress"))
                 .andExpect(jsonPath("$.created_at").exists())
                 .andExpect(jsonPath("$.updated_at").exists())
-                .andExpect(jsonPath("$.planned_activities.length()").value(2))
-                .andExpect(jsonPath("$.planned_activities[0].id").isNumber())
-                .andExpect(jsonPath("$.planned_activities[0].planned_activity_id").isNumber())
-                .andExpect(jsonPath("$.planned_activities[0].description").value("Revisar relatórios"))
-                .andExpect(jsonPath("$.planned_activities[0].checked").value(false))
-                .andExpect(jsonPath("$.planned_activities[1].description").value("Atender clientes"))
-                .andExpect(jsonPath("$.planned_activities[1].checked").value(false));
+                .andExpect(jsonPath("$.journey_planned_activities.length()").value(2))
+                .andExpect(jsonPath("$.journey_planned_activities[0].id").isNumber())
+                .andExpect(jsonPath("$.journey_planned_activities[0].planned_activity_id").isNumber())
+                .andExpect(jsonPath("$.journey_planned_activities[0].description").value("Revisar relatórios"))
+                .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false))
+                .andExpect(jsonPath("$.journey_planned_activities[1].description").value("Atender clientes"))
+                .andExpect(jsonPath("$.journey_planned_activities[1].is_checked").value(false));
     }
 
     @Test
@@ -89,7 +89,7 @@ class JourneyControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("in_progress"))
-                .andExpect(jsonPath("$.planned_activities").isEmpty());
+                .andExpect(jsonPath("$.journey_planned_activities").isEmpty());
     }
 
     @Test
@@ -125,9 +125,9 @@ class JourneyControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("in_progress"))
                 .andExpect(jsonPath("$.started_at").exists())
-                .andExpect(jsonPath("$.planned_activities.length()").value(1))
-                .andExpect(jsonPath("$.planned_activities[0].description").value("Revisar relatórios"))
-                .andExpect(jsonPath("$.planned_activities[0].checked").value(false));
+                .andExpect(jsonPath("$.journey_planned_activities.length()").value(1))
+                .andExpect(jsonPath("$.journey_planned_activities[0].description").value("Revisar relatórios"))
+                .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false));
     }
 
     @Test
@@ -151,7 +151,7 @@ class JourneyControllerTest {
 
     private String loginAndGetToken(String username, String password) throws Exception {
         LoginRequest body = new LoginRequest(username, password);
-        String responseBody = mockMvc.perform(post("/auth/login")
+        String responseBody = mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())

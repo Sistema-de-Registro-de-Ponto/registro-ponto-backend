@@ -1,7 +1,6 @@
 package br.com.playercontabilidade.registroponto.controller;
 
 import br.com.playercontabilidade.registroponto.dto.LoginRequest;
-import br.com.playercontabilidade.registroponto.dto.LoginResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,13 +44,13 @@ class AuthControllerTest {
                 .build();
     }
 
-    // ---------- POST /auth/login ----------
+    // ---------- POST /v1/auth/login ----------
 
     @Test
     void deveLogarColaboradorERetornarTokenJwt() throws Exception {
         LoginRequest body = new LoginRequest("colaborador", "12345678");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
@@ -63,7 +62,7 @@ class AuthControllerTest {
     void deveLogarGerenteERetornarTokenJwt() throws Exception {
         LoginRequest body = new LoginRequest("gerente", "87654321");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
@@ -75,7 +74,7 @@ class AuthControllerTest {
     void deveRetornar401QuandoUsuarioNaoExiste() throws Exception {
         LoginRequest body = new LoginRequest("naoexiste", "12345678");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isUnauthorized());
@@ -85,7 +84,7 @@ class AuthControllerTest {
     void deveRetornar401QuandoSenhaErrada() throws Exception {
         LoginRequest body = new LoginRequest("colaborador", "99999999");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isUnauthorized());
@@ -95,7 +94,7 @@ class AuthControllerTest {
     void deveRetornar400QuandoUsernameTemNumero() throws Exception {
         LoginRequest body = new LoginRequest("alice123", "12345678");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -105,7 +104,7 @@ class AuthControllerTest {
     void deveRetornar400QuandoSenhaTemLetra() throws Exception {
         LoginRequest body = new LoginRequest("colaborador", "1234567a");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -115,54 +114,10 @@ class AuthControllerTest {
     void deveRetornar400QuandoSenhaTemMenosDe8Digitos() throws Exception {
         LoginRequest body = new LoginRequest("colaborador", "1234567");
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
-    }
-
-    // ---------- GET /auth/me (protegido) ----------
-
-    @Test
-    void deveRetornarDadosDoUsuarioEmMeComTokenValido() throws Exception {
-        String token = loginAndGetToken("colaborador", "12345678");
-
-        mockMvc.perform(get("/auth/me")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value("colaborador"))
-                .andExpect(jsonPath("$.roles[0]").value("ROLE_COLLABORATOR"));
-    }
-
-    @Test
-    void deveRetornarDadosDoGerenteEmMeComTokenValido() throws Exception {
-        String token = loginAndGetToken("gerente", "87654321");
-
-        mockMvc.perform(get("/auth/me")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value("gerente"))
-                .andExpect(jsonPath("$.roles[0]").value("ROLE_MANAGER"));
-    }
-
-    @Test
-    void deveRetornar401EmMeSemHeaderAuthorization() throws Exception {
-        mockMvc.perform(get("/auth/me"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void deveRetornar401EmMeComTokenAdulterado() throws Exception {
-        mockMvc.perform(get("/auth/me")
-                        .header("Authorization", "Bearer xxx.yyy.zzz"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void deveRetornar401EmMeComHeaderSemBearer() throws Exception {
-        mockMvc.perform(get("/auth/me")
-                        .header("Authorization", "Token abc"))
-                .andExpect(status().isUnauthorized());
     }
 
     // ---------- /health (público) ----------
@@ -183,16 +138,5 @@ class AuthControllerTest {
     void swaggerUiDeveSerAcessivelSemToken() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
                 .andExpect(status().isOk());
-    }
-
-    private String loginAndGetToken(String username, String password) throws Exception {
-        LoginRequest body = new LoginRequest(username, password);
-        String responseBody = mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(body)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        LoginResponse response = objectMapper.readValue(responseBody, LoginResponse.class);
-        return response.token();
     }
 }

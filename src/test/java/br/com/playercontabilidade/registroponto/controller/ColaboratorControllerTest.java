@@ -49,7 +49,7 @@ class ColaboratorControllerTest {
     void deveRetornarPerfilDoColaboradorComTokenValido() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(get("/v1/colaborator")
+        mockMvc.perform(get("/v1/collaborator")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.user_id").isNumber())
@@ -58,13 +58,13 @@ class ColaboratorControllerTest {
 
     @Test
     void deveRetornar401SemToken() throws Exception {
-        mockMvc.perform(get("/v1/colaborator"))
+        mockMvc.perform(get("/v1/collaborator"))
                 .andExpect(status().isUnauthorized());
     }
 
     private String loginAndGetToken(String username, String password) throws Exception {
         LoginRequest body = new LoginRequest(username, password);
-        String responseBody = mockMvc.perform(post("/auth/login")
+        String responseBody = mockMvc.perform(post("/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
