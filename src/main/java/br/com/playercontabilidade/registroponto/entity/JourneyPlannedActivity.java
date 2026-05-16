@@ -39,10 +39,12 @@ public class JourneyPlannedActivity {
     @JoinColumn(name = "journey_id", nullable = false)
     private Journey journey;
 
-    @NotNull
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "planned_activity_id", nullable = false)
+    @ManyToOne(optional = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "planned_activity_id")
     private PlannedActivity plannedActivity;
+
+    @Column(name = "snapshot_planned_activity_id")
+    private Long snapshotPlannedActivityId;
 
     @NotBlank
     @Column(nullable = false, length = 500)

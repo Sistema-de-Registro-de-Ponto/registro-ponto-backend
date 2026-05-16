@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -63,7 +65,7 @@ class JourneyControllerTest {
                         .content("{\"description\":\"Atender clientes\"}"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
@@ -87,7 +89,7 @@ class JourneyControllerTest {
     void deveIniciarJornadaSemAtividadesPlanejadas() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("in_progress"))
@@ -100,11 +102,11 @@ class JourneyControllerTest {
     void deveRetornar409QuandoJaExisteJornadaEmAndamento() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Jornada em andamento"));
@@ -120,7 +122,7 @@ class JourneyControllerTest {
                         .content("{\"description\":\"Revisar relatórios\"}"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 
@@ -147,11 +149,85 @@ class JourneyControllerTest {
     }
 
     @Test
+    void deveEncerrarJornadaComResumo() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"summary\":\"Resumo do dia\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.summary").value("Resumo do dia"))
+                .andExpect(jsonPath("$.ended_at").exists())
+                .andExpect(jsonPath("$.duration_seconds").value(greaterThanOrEqualTo(0)));
+
+        mockMvc.perform(get("/v1/journeys/current")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deveEncerrarJornadaSemResumo() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.summary").value(nullValue()));
+    }
+
+    @Test
+    void deveRetornar400QuandoSummaryExcedeTamanhoMaximo() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+
+        String longSummary = "x".repeat(2001);
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"summary\":\"" + longSummary + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Requisição inválida"));
+    }
+
+    @Test
+    void deveRetornar404AoEncerrarSemJornadaAtiva() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Jornada não encontrada"));
+    }
+
+    @Test
     void deveRetornar401SemToken() throws Exception {
-        mockMvc.perform(post("/v1/journeys"))
+        mockMvc.perform(post("/v1/journeys/start"))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/v1/journeys/current"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isUnauthorized());
     }
 

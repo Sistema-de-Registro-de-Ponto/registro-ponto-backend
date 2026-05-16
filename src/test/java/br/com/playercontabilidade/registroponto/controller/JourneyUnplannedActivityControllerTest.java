@@ -65,7 +65,7 @@ class JourneyUnplannedActivityControllerTest {
     void deveCriarListarNoCurrentERemoverAtividadeNaoPlanejada() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 
@@ -129,7 +129,7 @@ class JourneyUnplannedActivityControllerTest {
     void deveRetornar409QuandoJornadaNaoEstaEmAndamento() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 
@@ -165,7 +165,7 @@ class JourneyUnplannedActivityControllerTest {
     void deveRetornar409AoRemoverQuandoJornadaFinalizada() throws Exception {
         String token = loginAndGetToken("colaborador", "12345678");
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 

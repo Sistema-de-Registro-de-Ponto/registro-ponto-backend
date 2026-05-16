@@ -110,6 +110,44 @@ class PlannedActivityControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void deveRetornarUmaListaVaziaQuandoNaoHouverAtividadesPlanejadas() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void deveRetornarUmaListaVaziaMesmoQueNaoTenhaSidoCheckadoEmUmaJornadaFinalizada() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Pendência não marcada\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false));
+
+        mockMvc.perform(get("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
     private String loginAndGetToken(String username, String password) throws Exception {
         LoginRequest body = new LoginRequest(username, password);
         String responseBody = mockMvc.perform(post("/v1/auth/login")

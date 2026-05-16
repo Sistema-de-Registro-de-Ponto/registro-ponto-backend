@@ -58,7 +58,7 @@ class JourneyPlannedActivityControllerTest {
                         .content("{\"description\":\"Revisar relatórios\"}"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/v1/journeys")
+        mockMvc.perform(post("/v1/journeys/start")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated());
 

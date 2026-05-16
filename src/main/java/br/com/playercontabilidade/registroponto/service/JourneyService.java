@@ -1,5 +1,6 @@
 package br.com.playercontabilidade.registroponto.service;
 
+import br.com.playercontabilidade.registroponto.dto.JourneyEndRequest;
 import br.com.playercontabilidade.registroponto.dto.JourneyPlannedActivityItemResponse;
 import br.com.playercontabilidade.registroponto.dto.JourneyResponse;
 import br.com.playercontabilidade.registroponto.dto.PlannedActivityRequest;
@@ -25,7 +26,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -62,6 +65,7 @@ public class JourneyService {
             journey.getPlannedActivities().add(JourneyPlannedActivity.builder()
                     .journey(journey)
                     .plannedActivity(plannedActivity)
+                    .snapshotPlannedActivityId(plannedActivity.getId())
                     .description(plannedActivity.getDescription())
                     .checked(false)
                     .build());
@@ -69,6 +73,59 @@ public class JourneyService {
 
         Journey saved = journeyRepository.save(journey);
         return toResponse(saved);
+    }
+
+    @Transactional
+    public JourneyResponse end(String username, JourneyEndRequest request) {
+        Colaborator colaborator = resolveColaborator(username);
+        Journey journey = journeyRepository
+                .findByColaborator_IdAndEndedAtIsNullAndStatus(colaborator.getId(), JourneyStatus.IN_PROGRESS)
+                .orElseThrow(() -> new JourneyNotFoundException(
+                        "Não há jornada em andamento para este colaborador."));
+
+        Instant endedAt = Instant.now();
+        long durationSeconds = Duration.between(journey.getStartedAt(), endedAt).getSeconds();
+        if (durationSeconds < 0) {
+            durationSeconds = 0;
+        }
+
+        journey.setEndedAt(endedAt);
+        journey.setDurationSeconds(durationSeconds);
+        journey.setSummary(normalizeSummary(request.summary()));
+        journey.setStatus(JourneyStatus.COMPLETED);
+
+        unlinkAndDeletePlannedActivitiesFromBacklog(journey);
+
+        Journey saved = journeyRepository.save(journey);
+        return toResponse(saved);
+    }
+
+    private void unlinkAndDeletePlannedActivitiesFromBacklog(Journey journey) {
+        List<PlannedActivity> toDelete = new ArrayList<>();
+        for (JourneyPlannedActivity jpa : journey.getPlannedActivities()) {
+            PlannedActivity pa = jpa.getPlannedActivity();
+            if (pa == null) {
+                continue;
+            }
+            if (jpa.getSnapshotPlannedActivityId() == null) {
+                jpa.setSnapshotPlannedActivityId(pa.getId());
+            }
+            jpa.setPlannedActivity(null);
+            toDelete.add(pa);
+        }
+        if (toDelete.isEmpty()) {
+            return;
+        }
+        journeyRepository.saveAndFlush(journey);
+        plannedActivityRepository.deleteAll(toDelete);
+    }
+
+    private String normalizeSummary(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +217,9 @@ public class JourneyService {
                 journey.getId(),
                 journey.getColaborator().getId(),
                 appTimeService.toOffsetDateTime(journey.getStartedAt()),
+                journey.getEndedAt() != null ? appTimeService.toOffsetDateTime(journey.getEndedAt()) : null,
+                journey.getDurationSeconds(),
+                journey.getSummary(),
                 plannedActivities,
                 unplannedActivities,
                 journey.getStatus(),
@@ -176,9 +236,12 @@ public class JourneyService {
     }
 
     private JourneyPlannedActivityItemResponse toItemResponse(JourneyPlannedActivity item) {
+        Long plannedActivityRef = item.getPlannedActivity() != null
+                ? item.getPlannedActivity().getId()
+                : item.getSnapshotPlannedActivityId();
         return new JourneyPlannedActivityItemResponse(
                 item.getId(),
-                item.getPlannedActivity().getId(),
+                plannedActivityRef,
                 item.getDescription(),
                 item.isChecked());
     }

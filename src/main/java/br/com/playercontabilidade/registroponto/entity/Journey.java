@@ -52,6 +52,12 @@ public class Journey {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    @Column(name = "duration_seconds")
+    private Long durationSeconds;
+
+    @Column(length = 2000)
+    private String summary;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

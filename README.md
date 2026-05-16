@@ -49,6 +49,28 @@ mvn spring-boot:run
 - OpenAPI JSON: http://localhost:8080/v3/api-docs
 - Health check: http://localhost:8080/health
 
+### Migrações de banco (Flyway)
+
+O schema é versionado em `src/main/resources/db/migration/`. Na subida da aplicação o Flyway aplica as migrações pendentes automaticamente — **não é necessário rodar SQL manual em produção**.
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `V1__init_schema.sql` | Schema completo para banco **novo** |
+| `V2__journey_checkout_and_planned_activity_snapshot.sql` | Evolução idempotente: `duration_seconds`, `summary`, `snapshot_planned_activity_id`, `planned_activity_id` nullable |
+
+Configuração (`application.yml`):
+
+- `spring.jpa.hibernate.ddl-auto: validate` — o Hibernate **não** altera mais tabelas em runtime; só valida o mapeamento.
+- `spring.flyway.baseline-on-migrate: true` e `baseline-version: 1` — banco **já existente** (criado antes pelo Hibernate) recebe baseline na V1 e executa apenas **V2+**, preservando dados.
+
+**Produção (primeiro deploy com Flyway):** suba a aplicação normalmente; o Flyway registra o baseline e aplica `V2`. Confira em `flyway_schema_history`.
+
+**Ambiente novo:** executa `V1` (cria tabelas) e `V2` (ajustes idempotentes).
+
+**Novas alterações:** crie sempre `V3__descricao.sql`, `V4__...` (nunca edite migrações já aplicadas em produção).
+
+Os testes automatizados desabilitam o Flyway e usam H2 com `ddl-auto: create-drop` (`src/test/resources/application.properties`).
+
 ### Credenciais de teste
 
 Dois usuários são criados automaticamente no startup pelo `DataSeeder`, caso ainda não existam no banco:
@@ -156,34 +178,41 @@ Registram o **check-in** (início da jornada) do colaborador autenticado. O hor�
 
 | Método | Endpoint                       | Auth   | Descrição                                                                 |
 |--------|--------------------------------|--------|---------------------------------------------------------------------------|
-| GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
-| POST   | `/v1/journeys`                 | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
+| GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (200)                      |
+| POST   | `/v1/journeys/start`           | Bearer | Check-in: inicia jornada; body `{}` → JSON da jornada (201)               |
+| POST   | `/v1/journeys/current/end`     | Bearer | Check-out: encerra a jornada em andamento; body `{ "summary" }` opcional → mesmo JSON de jornada do check-in (200) |
 | POST   | `/v1/journeys/{id}/activities/unplanned` ou `.../unplanned/` | Bearer | Adiciona atividade não planejada à jornada `{id}`: body `{ "description" }` → `{ id, journey_id, description, created_at }` (201) |
 | DELETE | `/v1/journeys/activities/unplanned/{id}` | Bearer | Remove a atividade não planejada pelo `id` do registro → mesmo corpo que no POST (200) |
 | PUT    | `/v1/journeys/activities/planned/{id}` | Bearer | Marca/desmarca item: URL com o `id` do vínculo; body `{ "is_checked" }` → mesmo formato de um elemento de `journey_planned_activities` (200) |
 
 Modelo de dados:
 
-- `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null até finalizar), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
+- `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null enquanto em andamento), `duration_seconds` (definido no encerramento), `summary` (opcional, texto livre no check-out), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
 - `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), coluna `checked` (mapeada no JSON como `is_checked`)
 - `unplanned_activities`: `id`, `journey_id`, `description`, `created_at` (JSON em ISO-8601 com o fuso da aplicação)
 
 Regras:
 
-- Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
+- Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST /v1/journeys/start` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
 - `GET /v1/journeys/current` sem jornada ativa retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
 - O backlog em `/v1/activities/planned` **não é removido** no check-in; o CRUD de atividades planejadas permanece igual.
+- **Encerramento (check-out)** com `POST /v1/journeys/current/end`: só é permitido com jornada **`in_progress`**. O servidor grava `ended_at`, calcula `duration_seconds` entre `started_at` e o encerramento, aplica `status` `completed` e persiste o `summary` se enviado (opcional). Se não houver jornada em andamento, retorna **404** (mesmo título que `GET /current` sem jornada).
+- Após `completed`, **nenhuma alteração** é permitida na jornada (regras abaixo reforçam isso para atividades e marcações).
 - **Atividades não planejadas** (`unplanned_activities` no JSON da jornada): só podem ser **incluídas ou removidas** enquanto a jornada estiver **em andamento** (`status` `in_progress` e `ended_at` nulo). Se a jornada estiver finalizada (`completed` ou `ended_at` preenchido), `POST` e `DELETE` retornam **409** (`ProblemDetail`, título `Jornada não pode ser alterada`). Jornada inexistente, de outro colaborador ou não pertencente ao token no `POST` retorna **404** (`Jornada não encontrada`). Atividade não planejada inexistente ou de outro colaborador no `DELETE` retorna **404** (`Atividade não planejada não encontrada`).
 - Para marcar ou desmarcar um item vinculado à jornada em andamento, use `PUT /v1/journeys/activities/planned/{id}` com o `id` de cada elemento em `journey_planned_activities` na URL e body `{ "is_checked": true|false }`.
-- Finalizar jornada (`completed`, `ended_at`) será tratado em feature futura.
 
-Resposta esperada (201):
+Em jornada em andamento, `ended_at`, `duration_seconds` e `summary` vêm como `null` no JSON. Após o encerramento, passam a vir preenchidos conforme o check-out.
+
+Resposta esperada no check-in (201):
 
 ```json
 {
   "id": 1,
   "collaborator_id": 1,
   "started_at": "2026-05-15T08:00:00-03:00",
+  "ended_at": null,
+  "duration_seconds": null,
+  "summary": null,
   "status": "in_progress",
   "journey_planned_activities": [
     {
@@ -206,14 +235,29 @@ curl http://localhost:8080/v1/journeys/current \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
-**Exemplo — iniciar jornada:**
+**Exemplo — iniciar jornada (check-in):**
 
 ```bash
-curl -X POST http://localhost:8080/v1/journeys \
+curl -X POST http://localhost:8080/v1/journeys/start \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
+
+**Exemplo — encerrar jornada (check-out) com resumo opcional:**
+
+```bash
+curl -X POST http://localhost:8080/v1/journeys/current/end \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"summary":"Fechei todas as pendências; reunião com cliente no período da tarde."}'
+```
+
+Resposta esperada (200): mesmo formato do check-in (`JourneyResponse`), com `status` `completed`, `ended_at` preenchido, `duration_seconds` calculado pelo servidor e `summary` com o texto enviado (ou `null` se usar `{}` ou `{"summary":null}`).
+
+Validações em `POST /v1/journeys/current/end`:
+
+- `summary`: opcional; se presente, até 2000 caracteres
 
 Validações em `POST /v1/journeys/{id}/activities/unplanned` (mesmo formato de `POST /v1/activities/planned`):
 
@@ -239,7 +283,7 @@ curl -X DELETE http://localhost:8080/v1/journeys/activities/unplanned/1 \
 
 Resposta esperada (200): mesmo JSON do item criado (último estado antes da exclusão).
 
-O segmento `{id}` na URL do `PUT /v1/journeys/activities/planned/{id}` é o `id` retornado em `journey_planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
+O segmento `{id}` na URL do `PUT /v1/journeys/activities/planned/{id}` é o `id` retornado em `journey_planned_activities` em `GET`/`POST /v1/journeys/start`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
 
 Validações do body de marcação:
 
