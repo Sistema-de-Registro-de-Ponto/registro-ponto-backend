@@ -13,4 +13,6 @@ public interface JourneyRepository extends JpaRepository<Journey, Long> {
     boolean existsByColaborator_IdAndEndedAtIsNullAndStatus(Long colaboratorId, JourneyStatus status);
 
     Optional<Journey> findByColaborator_IdAndEndedAtIsNullAndStatus(Long colaboratorId, JourneyStatus status);
+
+    Optional<Journey> findByIdAndColaborator_Id(Long id, Long colaboratorId);
 }

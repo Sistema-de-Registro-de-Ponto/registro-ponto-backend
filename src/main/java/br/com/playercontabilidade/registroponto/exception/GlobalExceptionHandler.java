@@ -54,6 +54,22 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(JourneyNotModifiableException.class)
+    public ProblemDetail handleJourneyNotModifiable(JourneyNotModifiableException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, e.getMessage());
+        problem.setTitle("Jornada não pode ser alterada");
+        return problem;
+    }
+
+    @ExceptionHandler(UnplannedActivityNotFoundException.class)
+    public ProblemDetail handleUnplannedActivityNotFound(UnplannedActivityNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Atividade não planejada não encontrada");
+        return problem;
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

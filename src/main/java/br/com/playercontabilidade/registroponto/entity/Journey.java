@@ -69,4 +69,9 @@ public class Journey {
     @OrderBy("createdAt ASC")
     @Builder.Default
     private List<JourneyPlannedActivity> plannedActivities = new ArrayList<>();
+
+    @OneToMany(mappedBy = "journey", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("createdAt ASC")
+    @Builder.Default
+    private List<UnplannedActivity> unplannedActivities = new ArrayList<>();
 }

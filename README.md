@@ -158,18 +158,22 @@ Registram o **check-in** (início da jornada) do colaborador autenticado. O hor�
 |--------|--------------------------------|--------|---------------------------------------------------------------------------|
 | GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (mesmo JSON do POST) (200) |
 | POST   | `/v1/journeys`                 | Bearer | Inicia jornada: body `{}` → resposta com jornada e atividades vinculadas (201) |
+| POST   | `/v1/journeys/{id}/activities/unplanned` ou `.../unplanned/` | Bearer | Adiciona atividade não planejada à jornada `{id}`: body `{ "description" }` → `{ id, journey_id, description, created_at }` (201) |
+| DELETE | `/v1/journeys/activities/unplanned/{id}` | Bearer | Remove a atividade não planejada pelo `id` do registro → mesmo corpo que no POST (200) |
 | PUT    | `/v1/journeys/activities/planned/{id}` | Bearer | Marca/desmarca item: URL com o `id` do vínculo; body `{ "is_checked" }` → mesmo formato de um elemento de `journey_planned_activities` (200) |
 
 Modelo de dados:
 
 - `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null até finalizar), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
 - `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), coluna `checked` (mapeada no JSON como `is_checked`)
+- `unplanned_activities`: `id`, `journey_id`, `description`, `created_at` (JSON em ISO-8601 com o fuso da aplicação)
 
 Regras:
 
 - Só pode existir **uma** jornada `in_progress` por colaborador; segundo `POST` retorna **409** (`ProblemDetail`, título `Jornada em andamento`).
 - `GET /v1/journeys/current` sem jornada ativa retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
 - O backlog em `/v1/activities/planned` **não é removido** no check-in; o CRUD de atividades planejadas permanece igual.
+- **Atividades não planejadas** (`unplanned_activities` no JSON da jornada): só podem ser **incluídas ou removidas** enquanto a jornada estiver **em andamento** (`status` `in_progress` e `ended_at` nulo). Se a jornada estiver finalizada (`completed` ou `ended_at` preenchido), `POST` e `DELETE` retornam **409** (`ProblemDetail`, título `Jornada não pode ser alterada`). Jornada inexistente, de outro colaborador ou não pertencente ao token no `POST` retorna **404** (`Jornada não encontrada`). Atividade não planejada inexistente ou de outro colaborador no `DELETE` retorna **404** (`Atividade não planejada não encontrada`).
 - Para marcar ou desmarcar um item vinculado à jornada em andamento, use `PUT /v1/journeys/activities/planned/{id}` com o `id` de cada elemento em `journey_planned_activities` na URL e body `{ "is_checked": true|false }`.
 - Finalizar jornada (`completed`, `ended_at`) será tratado em feature futura.
 
@@ -189,6 +193,7 @@ Resposta esperada (201):
       "is_checked": false
     }
   ],
+  "unplanned_activities": [],
   "created_at": "2026-05-15T08:00:00-03:00",
   "updated_at": "2026-05-15T08:00:00-03:00"
 }
@@ -210,7 +215,31 @@ curl -X POST http://localhost:8080/v1/journeys \
   -d '{}'
 ```
 
-O segmento `{id}` na URL é o `id` retornado em `journey_planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
+Validações em `POST /v1/journeys/{id}/activities/unplanned` (mesmo formato de `POST /v1/activities/planned`):
+
+- `description`: obrigatório, não vazio, até 500 caracteres
+
+**Exemplo — adicionar atividade não planejada:**
+
+```bash
+curl -X POST http://localhost:8080/v1/journeys/1/activities/unplanned \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Atendimento emergencial"}'
+```
+
+Resposta esperada (201): `{"id":1,"journey_id":1,"description":"Atendimento emergencial","created_at":"2026-05-15T10:00:00-03:00"}`
+
+**Exemplo — remover atividade não planejada:**
+
+```bash
+curl -X DELETE http://localhost:8080/v1/journeys/activities/unplanned/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200): mesmo JSON do item criado (último estado antes da exclusão).
+
+O segmento `{id}` na URL do `PUT /v1/journeys/activities/planned/{id}` é o `id` retornado em `journey_planned_activities` em `GET`/`POST /v1/journeys`. Se não existir, não pertencer ao colaborador do token ou a jornada não estiver em andamento (`ended_at` nulo e `status` `in_progress`), a API responde **404** (`ProblemDetail`, título `Atividade da jornada não encontrada`).
 
 Validações do body de marcação:
 
@@ -243,4 +272,5 @@ mvn test -Dtest=ColaboratorControllerTest
 mvn test -Dtest=PlannedActivityControllerTest
 mvn test -Dtest=JourneyControllerTest
 mvn test -Dtest=JourneyPlannedActivityControllerTest
+mvn test -Dtest=JourneyUnplannedActivityControllerTest
 ```

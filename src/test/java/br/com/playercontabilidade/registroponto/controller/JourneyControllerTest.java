@@ -78,7 +78,9 @@ class JourneyControllerTest {
                 .andExpect(jsonPath("$.journey_planned_activities[0].description").value("Revisar relatórios"))
                 .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false))
                 .andExpect(jsonPath("$.journey_planned_activities[1].description").value("Atender clientes"))
-                .andExpect(jsonPath("$.journey_planned_activities[1].is_checked").value(false));
+                .andExpect(jsonPath("$.journey_planned_activities[1].is_checked").value(false))
+                .andExpect(jsonPath("$.unplanned_activities").isArray())
+                .andExpect(jsonPath("$.unplanned_activities.length()").value(0));
     }
 
     @Test
@@ -89,7 +91,9 @@ class JourneyControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("in_progress"))
-                .andExpect(jsonPath("$.journey_planned_activities").isEmpty());
+                .andExpect(jsonPath("$.journey_planned_activities").isEmpty())
+                .andExpect(jsonPath("$.unplanned_activities").isArray())
+                .andExpect(jsonPath("$.unplanned_activities.length()").value(0));
     }
 
     @Test
@@ -127,7 +131,9 @@ class JourneyControllerTest {
                 .andExpect(jsonPath("$.started_at").exists())
                 .andExpect(jsonPath("$.journey_planned_activities.length()").value(1))
                 .andExpect(jsonPath("$.journey_planned_activities[0].description").value("Revisar relatórios"))
-                .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false));
+                .andExpect(jsonPath("$.journey_planned_activities[0].is_checked").value(false))
+                .andExpect(jsonPath("$.unplanned_activities").isArray())
+                .andExpect(jsonPath("$.unplanned_activities.length()").value(0));
     }
 
     @Test

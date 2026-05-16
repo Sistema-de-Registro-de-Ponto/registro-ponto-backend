@@ -11,6 +11,7 @@ public record JourneyResponse(
         @JsonProperty("collaborator_id") Long collaboratorId,
         @JsonProperty("started_at") OffsetDateTime startedAt,
         @JsonProperty("journey_planned_activities") List<JourneyPlannedActivityItemResponse> plannedActivities,
+        @JsonProperty("unplanned_activities") List<UnplannedActivityResponse> unplannedActivities,
         JourneyStatus status,
         @JsonProperty("created_at") OffsetDateTime createdAt,
         @JsonProperty("updated_at") OffsetDateTime updatedAt
