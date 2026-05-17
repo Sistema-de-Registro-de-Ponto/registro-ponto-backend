@@ -22,6 +22,14 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(ManagerNotFoundException.class)
+    public ProblemDetail handleManagerNotFound(ManagerNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Gerente não encontrado");
+        return problem;
+    }
+
     @ExceptionHandler(PlannedActivityNotFoundException.class)
     public ProblemDetail handlePlannedActivityNotFound(PlannedActivityNotFoundException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

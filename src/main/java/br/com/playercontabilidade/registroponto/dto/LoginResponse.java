@@ -1,8 +1,10 @@
 package br.com.playercontabilidade.registroponto.dto;
 
-public record LoginResponse(String token, String tokenType) {
+import br.com.playercontabilidade.registroponto.entity.Role;
 
-    public static LoginResponse bearer(String token) {
-        return new LoginResponse(token, "Bearer");
+public record LoginResponse(String token, String tokenType, Role role) {
+
+    public static LoginResponse bearer(String token, Role role) {
+        return new LoginResponse(token, "Bearer", role);
     }
 }
