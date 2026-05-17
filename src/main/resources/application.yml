@@ -41,6 +41,14 @@ springdoc:
 app:
   time:
     zone: ${APP_TIME_ZONE:America/Sao_Paulo}
+  seed:
+    collaborator-demo:
+      enabled: ${APP_SEED_COLLABORATOR_DEMO:false}
+      username: ${APP_SEED_COLLABORATOR_DEMO_USERNAME:demo}
+      password: ${APP_SEED_COLLABORATOR_DEMO_PASSWORD:12345678}
+      first-name: ${APP_SEED_COLLABORATOR_DEMO_FIRST_NAME:Demo}
+      anchor-date: ${APP_SEED_COLLABORATOR_DEMO_ANCHOR_DATE:2026-05-16}
+      journey-count: ${APP_SEED_COLLABORATOR_DEMO_JOURNEY_COUNT:60}
   security:
     jwt:
       secret: ${JWT_SECRET:troque-este-segredo-em-producao-precisa-de-pelo-menos-256-bits-para-HS256}

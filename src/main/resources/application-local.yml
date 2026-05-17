@@ -1,0 +1,9 @@
+# Perfil local/dev: ativa seed de demonstração de colaborador (60 jornadas).
+# Uso: mvn spring-boot:run -Dspring-boot.run.profiles=local
+# ou: APP_SEED_COLLABORATOR_DEMO=true mvn spring-boot:run
+app:
+  seed:
+    collaborator-demo:
+      enabled: true
+      username: natan
+      first-name: Natan

@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -225,10 +226,102 @@ class JourneyControllerTest {
         mockMvc.perform(get("/v1/journeys/current"))
                 .andExpect(status().isUnauthorized());
 
+        mockMvc.perform(get("/v1/journeys")
+                        .param("start_date", "2025-01-01")
+                        .param("end_date", "2025-12-31"))
+                .andExpect(status().isUnauthorized());
+
         mockMvc.perform(post("/v1/journeys/current/end")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deveListarHistoricoDeJornadasNoPeriodo() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        startAndEndJourney(token);
+        startAndEndJourney(token);
+
+        mockMvc.perform(get("/v1/journeys")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2020-01-01")
+                        .param("end_date", "2099-12-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.last").value(true))
+                .andExpect(jsonPath("$.content[0].status").value("completed"))
+                .andExpect(jsonPath("$.content[0].started_at").exists())
+                .andExpect(jsonPath("$.content[0].ended_at").exists())
+                .andExpect(jsonPath("$.content[1].status").value("completed"));
+    }
+
+    @Test
+    void devePaginarHistoricoComIndicadorLast() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        startAndEndJourney(token);
+        startAndEndJourney(token);
+        startAndEndJourney(token);
+
+        mockMvc.perform(get("/v1/journeys")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2020-01-01")
+                        .param("end_date", "2099-12-31")
+                        .param("page", "0")
+                        .param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.last").value(false));
+
+        mockMvc.perform(get("/v1/journeys")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2020-01-01")
+                        .param("end_date", "2099-12-31")
+                        .param("page", "1")
+                        .param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.last").value(true));
+    }
+
+    @Test
+    void deveRetornarListaVaziaQuandoNaoHaJornadasNoPeriodo() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/journeys")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2000-01-01")
+                        .param("end_date", "2000-01-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.last").value(true))
+                .andExpect(jsonPath("$.empty").value(true));
+    }
+
+    @Test
+    void deveRetornar400QuandoStartDatePosteriorAEndDate() throws Exception {
+        String token = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/journeys")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2025-05-14")
+                        .param("end_date", "2025-05-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Requisição inválida"));
+    }
+
+    private void startAndEndJourney(String token) throws Exception {
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
     }
 
     private String loginAndGetToken(String username, String password) throws Exception {

@@ -178,6 +178,7 @@ Registram o **check-in** (início da jornada) do colaborador autenticado. O hor�
 
 | Método | Endpoint                       | Auth   | Descrição                                                                 |
 |--------|--------------------------------|--------|---------------------------------------------------------------------------|
+| GET    | `/v1/journeys`                 | Bearer | Histórico de jornadas do colaborador no período, com paginação (200)      |
 | GET    | `/v1/journeys/current`         | Bearer | Retorna a jornada `in_progress` do colaborador (200)                      |
 | POST   | `/v1/journeys/start`           | Bearer | Check-in: inicia jornada; body `{}` → JSON da jornada (201)               |
 | POST   | `/v1/journeys/current/end`     | Bearer | Check-out: encerra a jornada em andamento; body `{ "summary" }` opcional → mesmo JSON de jornada do check-in (200) |
@@ -190,6 +191,79 @@ Modelo de dados:
 - `journeys`: `id`, `collaborator_id`, `started_at`, `ended_at` (null enquanto em andamento), `duration_seconds` (definido no encerramento), `summary` (opcional, texto livre no check-out), `status` (`in_progress` \| `completed`), `created_at`, `updated_at`
 - `journey_planned_activities`: vínculo jornada ↔ atividade planejada, com `description` (snapshot), coluna `checked` (mapeada no JSON como `is_checked`)
 - `unplanned_activities`: `id`, `journey_id`, `description`, `created_at` (JSON em ISO-8601 com o fuso da aplicação)
+
+#### Histórico de jornadas
+
+`GET /v1/journeys` lista as jornadas do colaborador autenticado cujo `started_at` cai no intervalo informado (inclusive nos dois extremos, no fuso `APP_TIME_ZONE`). Ordenação: mais recente primeiro (`started_at` decrescente).
+
+Query params:
+
+| Parâmetro     | Obrigatório | Default | Descrição |
+|---------------|-------------|---------|-----------|
+| `start_date`  | sim         | —       | Início do período (`YYYY-MM-DD`) |
+| `end_date`    | sim         | —       | Fim do período (`YYYY-MM-DD`) |
+| `page`        | não         | `0`     | Índice da página (zero-based) |
+| `size`        | não         | `20`    | Quantidade de registros por página |
+
+Resposta (200): envelope padrão Spring Data `Slice` — lista em `content` (cada item é um `JourneyResponse` completo).
+
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "collaborator_id": 1,
+      "started_at": "2025-05-14T08:03:00-03:00",
+      "ended_at": "2025-05-14T17:30:00-03:00",
+      "duration_seconds": 34020,
+      "summary": null,
+      "journey_planned_activities": [],
+      "unplanned_activities": [],
+      "status": "completed",
+      "created_at": "2025-05-14T08:03:00-03:00",
+      "updated_at": "2025-05-14T17:30:00-03:00"
+    }
+  ],
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 20,
+    "sort": { "sorted": true, "unsorted": false, "empty": false },
+    "offset": 0,
+    "paged": true,
+    "unpaged": false
+  },
+  "first": true,
+  "last": false,
+  "size": 20,
+  "number": 0,
+  "numberOfElements": 1,
+  "empty": false,
+  "sort": { "sorted": true, "unsorted": false, "empty": false }
+}
+```
+
+Campos principais para o front:
+
+- `content`: itens da página atual.
+- `last`: `false` → há próxima página (“Carregar mais”); `true` → última página (ou lista vazia).
+- `number`: índice da página atual (zero-based); próxima requisição: `page = number + 1`.
+- `empty`: `true` se não houver jornadas no período.
+
+`start_date` posterior a `end_date` retorna **400** (`ProblemDetail`, título `Requisição inválida`).
+
+**Exemplo — primeira página do histórico:**
+
+```bash
+curl "http://localhost:8080/v1/journeys?start_date=2025-05-01&end_date=2025-05-14&page=0" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+**Exemplo — carregar mais (segunda página):**
+
+```bash
+curl "http://localhost:8080/v1/journeys?start_date=2025-05-01&end_date=2025-05-14&page=1" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
 
 Regras:
 

@@ -14,6 +14,7 @@ import br.com.playercontabilidade.registroponto.entity.UnplannedActivity;
 import br.com.playercontabilidade.registroponto.exception.ColaboratorNotFoundException;
 import br.com.playercontabilidade.registroponto.exception.JourneyAlreadyInProgressException;
 import br.com.playercontabilidade.registroponto.exception.JourneyNotFoundException;
+import br.com.playercontabilidade.registroponto.exception.InvalidDateRangeException;
 import br.com.playercontabilidade.registroponto.exception.JourneyNotModifiableException;
 import br.com.playercontabilidade.registroponto.exception.JourneyPlannedActivityNotFoundException;
 import br.com.playercontabilidade.registroponto.exception.UnplannedActivityNotFoundException;
@@ -23,17 +24,23 @@ import br.com.playercontabilidade.registroponto.repository.JourneyRepository;
 import br.com.playercontabilidade.registroponto.repository.PlannedActivityRepository;
 import br.com.playercontabilidade.registroponto.repository.UnplannedActivityRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class JourneyService {
+
+    public static final int DEFAULT_PAGE_SIZE = 20;
 
     private final ColaboratorRepository colaboratorRepository;
     private final PlannedActivityRepository plannedActivityRepository;
@@ -126,6 +133,33 @@ public class JourneyService {
         }
         String trimmed = raw.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    @Transactional(readOnly = true)
+    public Slice<JourneyResponse> list(
+            String username,
+            LocalDate startDate,
+            LocalDate endDate,
+            int page,
+            int size) {
+        if (startDate.isAfter(endDate)) {
+            throw new InvalidDateRangeException(
+                    "start_date não pode ser posterior a end_date.");
+        }
+
+        Colaborator colaborator = resolveColaborator(username);
+        Instant startedAtFrom = startDate.atStartOfDay(appTimeService.zone()).toInstant();
+        Instant startedAtToExclusive = endDate.plusDays(1).atStartOfDay(appTimeService.zone()).toInstant();
+
+        Pageable pageable = PageRequest.of(page, size);
+        Slice<Journey> slice = journeyRepository
+                .findByColaborator_IdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtDesc(
+                        colaborator.getId(),
+                        startedAtFrom,
+                        startedAtToExclusive,
+                        pageable);
+
+        return slice.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
