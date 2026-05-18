@@ -624,6 +624,190 @@ class ManagerControllerTest {
     }
 
     @Test
+    void deveRetornarRelatorioConsolidadoVazioQuandoNaoHaJornadasNoPeriodo() throws Exception {
+        String token = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2000-01-01")
+                        .param("end_date", "2000-01-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.period.start_date").value("2000-01-01"))
+                .andExpect(jsonPath("$.period.end_date").value("2000-01-31"))
+                .andExpect(jsonPath("$.summary.duration_seconds").value(0))
+                .andExpect(jsonPath("$.summary.planned_activities").value(0))
+                .andExpect(jsonPath("$.summary.activities_completed").value(0))
+                .andExpect(jsonPath("$.summary.unplanned_activities").value(0))
+                .andExpect(jsonPath("$.summary.average_adherence_percentage").value(0))
+                .andExpect(jsonPath("$.collaborators.content", hasSize(0)))
+                .andExpect(jsonPath("$.collaborators.empty").value(true));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveRetornarRelatorioConsolidadoComMetricasPorColaboradorEIndicadoresGlobais() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+
+        salvarJornadaFinalizada(colaborador, DIA_COM_DUAS_JORNADAS, LocalTime.of(8, 0), DURACAO_JORNADA_1_DIA_10);
+        salvarJornadaFinalizada(colaborador, DIA_COM_DUAS_JORNADAS, LocalTime.of(14, 0), DURACAO_JORNADA_2_DIA_10);
+        salvarJornadaFinalizada(colaborador, DIA_COM_UMA_JORNADA, LocalTime.of(9, 0), DURACAO_JORNADA_DIA_11);
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("end_date", DIA_COM_DUAS_JORNADAS.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(TOTAL_HORAS_DIA_10))
+                .andExpect(jsonPath("$.collaborators.content", hasSize(1)))
+                .andExpect(jsonPath("$.collaborators.content[0].first_name").value("Natanael"))
+                .andExpect(jsonPath("$.collaborators.content[0].duration_seconds").value(TOTAL_HORAS_DIA_10));
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("end_date", DIA_COM_UMA_JORNADA.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(TOTAL_HORAS_DIA_10 + DURACAO_JORNADA_DIA_11))
+                .andExpect(jsonPath("$.collaborators.content[0].duration_seconds")
+                        .value(TOTAL_HORAS_DIA_10 + DURACAO_JORNADA_DIA_11));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveRetornarRelatorioConsolidadoComAtividadesEAderencia() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa A\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa B\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isCreated());
+
+        String journeyBody = mockMvc.perform(get("/v1/journeys/current")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        long journeyId = objectMapper.readTree(journeyBody).get("id").asLong();
+        long firstActivityId = objectMapper.readTree(journeyBody)
+                .get("journey_planned_activities").get(0).get("id").asLong();
+
+        mockMvc.perform(put("/v1/journeys/activities/planned/" + firstActivityId)
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"is_checked\":true}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/v1/journeys/" + journeyId + "/activities/unplanned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Imprevisto\"}"))
+                .andExpect(status().isCreated());
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+        LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", hoje.toString())
+                        .param("end_date", hoje.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(0))
+                .andExpect(jsonPath("$.summary.planned_activities").value(2))
+                .andExpect(jsonPath("$.summary.activities_completed").value(1))
+                .andExpect(jsonPath("$.summary.unplanned_activities").value(1))
+                .andExpect(jsonPath("$.summary.average_adherence_percentage").value(50))
+                .andExpect(jsonPath("$.collaborators.content", hasSize(1)))
+                .andExpect(jsonPath("$.collaborators.content[0].planned_activities").value(2))
+                .andExpect(jsonPath("$.collaborators.content[0].activities_completed").value(1))
+                .andExpect(jsonPath("$.collaborators.content[0].unplanned_activities").value(1))
+                .andExpect(jsonPath("$.collaborators.content[0].adherence_percentage").value(50));
+
+        mockMvc.perform(post("/v1/journeys/current/end")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", hoje.toString())
+                        .param("end_date", hoje.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(greaterThanOrEqualTo(0)))
+                .andExpect(jsonPath("$.collaborators.content[0].duration_seconds").value(greaterThanOrEqualTo(0)));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveFiltrarRelatorioConsolidadoPorNomeDoColaborador() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+
+        salvarJornadaFinalizada(colaborador, DIA_COM_UMA_JORNADA, LocalTime.of(9, 0), DURACAO_JORNADA_DIA_11);
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_UMA_JORNADA.toString())
+                        .param("end_date", DIA_COM_UMA_JORNADA.toString())
+                        .param("search", "nat"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(DURACAO_JORNADA_DIA_11))
+                .andExpect(jsonPath("$.collaborators.content", hasSize(1)));
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_UMA_JORNADA.toString())
+                        .param("end_date", DIA_COM_UMA_JORNADA.toString())
+                        .param("search", "inexistente"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.duration_seconds").value(0))
+                .andExpect(jsonPath("$.collaborators.content", hasSize(0)));
+    }
+
+    @Test
+    void deveRetornar400QuandoStartDatePosteriorAEndDateNoRelatorioConsolidado() throws Exception {
+        String token = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + token)
+                        .param("start_date", "2025-05-14")
+                        .param("end_date", "2025-05-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Requisição inválida"));
+    }
+
+    @Test
+    void deveRetornar403QuandoColaboradorAcessaRelatorioConsolidado() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/manager/reports/consolidated")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deveRetornar401NoRelatorioConsolidadoSemToken() throws Exception {
+        mockMvc.perform(get("/v1/manager/reports/consolidated"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DirtiesContext
     void deveRetornarTotalHorasDoPeriodoSomandoJornadasFinalizadasPorDia() throws Exception {
         Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")

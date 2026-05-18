@@ -136,4 +136,38 @@ public interface JourneyRepository extends JpaRepository<Journey, Long> {
               AND u.role = :role
             """)
     Optional<Journey> findByIdForManager(@Param("id") Long id, @Param("role") Role role);
+
+    @Query("""
+            SELECT COALESCE(SUM(j.durationSeconds), 0)
+            FROM Journey j
+            JOIN j.colaborator c
+            JOIN c.user u
+            WHERE u.role = :role
+              AND j.startedAt >= :startedAtFrom
+              AND j.startedAt < :startedAtToExclusive
+              AND j.status = br.com.playercontabilidade.registroponto.entity.JourneyStatus.COMPLETED
+              AND (:search IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :search, '%')))
+            """)
+    long sumCompletedDurationSecondsForManagerInPeriod(
+            @Param("role") Role role,
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive,
+            @Param("search") String search);
+
+    @Query("""
+            SELECT DISTINCT j
+            FROM Journey j
+            LEFT JOIN FETCH j.plannedActivities
+            JOIN j.colaborator c
+            JOIN c.user u
+            WHERE u.role = :role
+              AND j.startedAt >= :startedAtFrom
+              AND j.startedAt < :startedAtToExclusive
+              AND (:search IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :search, '%')))
+            """)
+    List<Journey> findByStartedAtBetweenWithPlannedActivitiesForManager(
+            @Param("role") Role role,
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive,
+            @Param("search") String search);
 }

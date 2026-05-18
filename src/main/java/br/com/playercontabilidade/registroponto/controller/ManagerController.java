@@ -2,12 +2,14 @@ package br.com.playercontabilidade.registroponto.controller;
 
 import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorDetailResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorListItemResponse;
+import br.com.playercontabilidade.registroponto.dto.ManagerConsolidatedReportResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerJourneyDetailResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerJourneyListItemResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerOverviewResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerProfileResponse;
 import br.com.playercontabilidade.registroponto.service.JourneyService;
 import br.com.playercontabilidade.registroponto.service.ManagerCollaboratorsService;
+import br.com.playercontabilidade.registroponto.service.ManagerConsolidatedReportService;
 import br.com.playercontabilidade.registroponto.service.ManagerJourneysService;
 import br.com.playercontabilidade.registroponto.service.ManagerOverviewService;
 import br.com.playercontabilidade.registroponto.service.ManagerService;
@@ -41,6 +43,7 @@ public class ManagerController {
     private final ManagerOverviewService managerOverviewService;
     private final ManagerCollaboratorsService managerCollaboratorsService;
     private final ManagerJourneysService managerJourneysService;
+    private final ManagerConsolidatedReportService managerConsolidatedReportService;
 
     @GetMapping("/manager")
     @Operation(
@@ -122,6 +125,30 @@ public class ManagerController {
             @RequestParam(required = false) @Min(1) Integer size) {
         int pageSize = size != null ? size : JourneyService.DEFAULT_PAGE_SIZE;
         return managerJourneysService.list(startDate, endDate, collaboratorName, page, pageSize);
+    }
+
+    @GetMapping("/manager/reports/consolidated")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Relatório consolidado da operação",
+            description = """
+                    Retorna indicadores globais e tabela paginada por colaborador no período.
+                    Apenas colaboradores com ao menos uma jornada no intervalo.
+                    Horas consideram somente jornadas finalizadas (completed).
+                    Summary e tabela respeitam o filtro search.
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public ManagerConsolidatedReportResponse getConsolidatedReport(
+            @RequestParam(value = "start_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(value = "end_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) @Min(1) Integer size) {
+        int pageSize = size != null ? size : JourneyService.DEFAULT_PAGE_SIZE;
+        return managerConsolidatedReportService.getReport(startDate, endDate, search, page, pageSize);
     }
 
     @GetMapping("/manager/journeys/{id}")

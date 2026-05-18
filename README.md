@@ -139,6 +139,7 @@ Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael
 | GET    | `/v1/manager/collaborators/{id}`      | Bearer | MANAGER  | Detalhe do colaborador e jornada em andamento, se houver (200)            |
 | GET    | `/v1/manager/journeys`                | Bearer | MANAGER  | Lista jornadas no período, com filtro opcional por nome (200)             |
 | GET    | `/v1/manager/journeys/{id}`           | Bearer | MANAGER  | Detalhe da jornada com atividades (200)                                   |
+| GET    | `/v1/manager/reports/consolidated`    | Bearer | MANAGER  | Relatório consolidado: indicadores globais + tabela por colaborador (200) |
 
 Usuário sem linha em `managers` em `GET /v1/manager` retorna **404** (`ProblemDetail`, título `Gerente não encontrado`). Endpoints de colaboradores e jornadas com token de role `COLLABORATOR` retornam **403**.
 
@@ -186,6 +187,75 @@ Resposta esperada (200):
 | `average_adherence_percentage`  | Média inteira da aderência por jornada com atividades planejadas (0 se nenhuma) |
 | `activities_completed`          | Atividades planejadas da jornada marcadas (`is_checked` true) no período |
 | `unplanned_activities`          | Total de atividades não planejadas registradas no período               |
+
+#### Relatório consolidado
+
+Indicadores globais (`summary`) e tabela paginada por colaborador (`collaborators`) no período informado. Sem datas, usa o **dia atual** (`APP_TIME_ZONE`).
+
+Apenas colaboradores com **ao menos uma jornada** (`started_at` no intervalo) entram na tabela. O `summary` reflete o mesmo conjunto após o filtro `search`.
+
+| Query         | Obrigatório | Default | Descrição                                      |
+|---------------|-------------|---------|------------------------------------------------|
+| `start_date`  | não         | hoje    | Início do período (`YYYY-MM-DD`)               |
+| `end_date`    | não         | hoje    | Fim do período (`YYYY-MM-DD`)                  |
+| `search`      | não         | —       | Filtro parcial por `first_name` (case insensitive) |
+| `page`        | não         | `0`     | Página da tabela (0-based)                     |
+| `size`        | não         | `20`    | Itens por página                               |
+
+`start_date` posterior a `end_date` retorna **400** (`ProblemDetail`, título `Requisição inválida`).
+
+```bash
+curl "http://localhost:8080/v1/manager/reports/consolidated?start_date=2026-05-01&end_date=2026-05-18&search=nat&page=0&size=20" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200):
+
+```json
+{
+  "period": {
+    "start_date": "2026-05-01",
+    "end_date": "2026-05-18"
+  },
+  "summary": {
+    "duration_seconds": 45000,
+    "planned_activities": 42,
+    "activities_completed": 30,
+    "unplanned_activities": 8,
+    "average_adherence_percentage": 71
+  },
+  "collaborators": {
+    "content": [
+      {
+        "id": 1,
+        "first_name": "Natanael",
+        "duration_seconds": 12600,
+        "planned_activities": 10,
+        "activities_completed": 7,
+        "unplanned_activities": 2,
+        "adherence_percentage": 70
+      }
+    ],
+    "totalElements": 1,
+    "totalPages": 1,
+    "last": true,
+    "size": 20,
+    "number": 0,
+    "numberOfElements": 1,
+    "first": true,
+    "empty": false
+  }
+}
+```
+
+| Campo (`summary` e item em `collaborators.content`) | Descrição                                                                 |
+|-----------------------------------------------------|---------------------------------------------------------------------------|
+| `duration_seconds`                                  | Soma de `duration_seconds` das jornadas **completed** no período          |
+| `planned_activities`                                | Total de itens em `journey_planned_activities` no período               |
+| `activities_completed`                              | Itens planejados com `is_checked` true no período                         |
+| `unplanned_activities`                              | Total em `unplanned_activities` no período                                |
+| `average_adherence_percentage` (`summary`)            | Média inteira da aderência por jornada com planejadas (0 se nenhuma)      |
+| `adherence_percentage` (linha)                      | Mesma regra, média das jornadas do colaborador no período                 |
 
 #### Listagem de colaboradores
 
