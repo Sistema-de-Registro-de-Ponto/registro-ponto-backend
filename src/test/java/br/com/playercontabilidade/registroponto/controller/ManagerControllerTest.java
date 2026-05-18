@@ -100,6 +100,8 @@ class ManagerControllerTest {
                         .header("Authorization", "Bearer " + gerenteToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
                 .andExpect(jsonPath("$.content[0].first_name").value("Natanael"))
                 .andExpect(jsonPath("$.content[0].current_journey_status").value("none"))
                 .andExpect(jsonPath("$.content[0].hours_today_seconds").value(0))
@@ -122,6 +124,7 @@ class ManagerControllerTest {
                         .param("search", "inexistente"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.empty").value(true));
     }
 
@@ -245,6 +248,190 @@ class ManagerControllerTest {
         String colaboradorToken = loginAndGetToken("colaborador", "12345678");
 
         mockMvc.perform(get("/v1/manager/collaborators/" + colaborador.getId())
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deveListarJornadasVaziasQuandoNaoHaRegistrosNoPeriodo() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", "2000-01-01")
+                        .param("end_date", "2000-01-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.empty").value(true));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveListarJornadasNoPeriodoComFiltroPorNome() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+
+        salvarJornadaFinalizada(colaborador, DIA_COM_DUAS_JORNADAS, LocalTime.of(8, 0), DURACAO_JORNADA_1_DIA_10);
+        salvarJornadaFinalizada(colaborador, DIA_COM_UMA_JORNADA, LocalTime.of(9, 0), DURACAO_JORNADA_DIA_11);
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("end_date", DIA_COM_UMA_JORNADA.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.content[0].collaborator_first_name").value("Natanael"))
+                .andExpect(jsonPath("$.content[0].status").value("completed"))
+                .andExpect(jsonPath("$.content[0].duration_seconds").value(DURACAO_JORNADA_DIA_11))
+                .andExpect(jsonPath("$.content[0].journey_date").value(DIA_COM_UMA_JORNADA.toString()))
+                .andExpect(jsonPath("$.content[1].duration_seconds").value(DURACAO_JORNADA_1_DIA_10))
+                .andExpect(jsonPath("$.content[1].journey_date").value(DIA_COM_DUAS_JORNADAS.toString()));
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("end_date", DIA_COM_UMA_JORNADA.toString())
+                        .param("collaborator_name", "inexistente"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.empty").value(true));
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("end_date", DIA_COM_DUAS_JORNADAS.toString())
+                        .param("collaborator_name", "nata"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].duration_seconds").value(DURACAO_JORNADA_1_DIA_10));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveListarJornadaEmAndamentoComDuracaoCalculada() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isCreated());
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+        LocalDate hoje = LocalDate.now(APP_ZONE);
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", hoje.toString())
+                        .param("end_date", hoje.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].collaborator_first_name").value("Natanael"))
+                .andExpect(jsonPath("$.content[0].status").value("in_progress"))
+                .andExpect(jsonPath("$.content[0].ended_at").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].duration_seconds").value(greaterThanOrEqualTo(0)));
+    }
+
+    @Test
+    void deveRetornar400QuandoStartDatePosteriorAEndDateNaListagemDeJornadas() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("start_date", "2025-05-20")
+                        .param("end_date", "2025-05-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Requisição inválida"));
+    }
+
+    @Test
+    void deveRetornar403QuandoColaboradorListaJornadasDoGerente() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/manager/journeys")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deveRetornar401AoListarJornadasSemToken() throws Exception {
+        mockMvc.perform(get("/v1/manager/journeys"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DirtiesContext
+    void deveRetornarDetalheDaJornadaFinalizada() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+        Journey journey = salvarJornadaFinalizada(colaborador, DIA_COM_UMA_JORNADA, LocalTime.of(9, 0), DURACAO_JORNADA_DIA_11);
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys/" + journey.getId())
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(journey.getId()))
+                .andExpect(jsonPath("$.collaborator_first_name").value("Natanael"))
+                .andExpect(jsonPath("$.status").value("completed"))
+                .andExpect(jsonPath("$.duration_seconds").value(DURACAO_JORNADA_DIA_11))
+                .andExpect(jsonPath("$.ended_at").isNotEmpty())
+                .andExpect(jsonPath("$.journey_planned_activities").isArray())
+                .andExpect(jsonPath("$.unplanned_activities").isArray());
+    }
+
+    @Test
+    @DirtiesContext
+    void deveRetornarDetalheDaJornadaEmAndamento() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa planejada\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isCreated());
+
+        String journeyBody = mockMvc.perform(get("/v1/journeys/current")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long journeyId = objectMapper.readTree(journeyBody).get("id").asLong();
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys/" + journeyId)
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collaborator_first_name").value("Natanael"))
+                .andExpect(jsonPath("$.status").value("in_progress"))
+                .andExpect(jsonPath("$.ended_at").value(nullValue()))
+                .andExpect(jsonPath("$.duration_seconds").value(nullValue()))
+                .andExpect(jsonPath("$.summary").value(nullValue()))
+                .andExpect(jsonPath("$.journey_planned_activities", hasSize(1)));
+    }
+
+    @Test
+    void deveRetornar404QuandoJornadaNaoExisteNoDetalhe() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/journeys/99999")
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Jornada não encontrada"));
+    }
+
+    @Test
+    void deveRetornar403QuandoColaboradorAcessaDetalheDaJornada() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/manager/journeys/1")
                         .header("Authorization", "Bearer " + colaboradorToken))
                 .andExpect(status().isForbidden());
     }
@@ -480,14 +667,14 @@ class ManagerControllerTest {
                 .andExpect(jsonPath("$.duration_seconds").value(0));
     }
 
-    private void salvarJornadaFinalizada(
+    private Journey salvarJornadaFinalizada(
             Colaborator colaborador,
             LocalDate dia,
             LocalTime horaInicio,
             long durationSeconds) {
         Instant startedAt = dia.atTime(horaInicio).atZone(APP_ZONE).toInstant();
         Instant endedAt = startedAt.plusSeconds(durationSeconds);
-        journeyRepository.save(Journey.builder()
+        return journeyRepository.save(Journey.builder()
                 .colaborator(colaborador)
                 .startedAt(startedAt)
                 .endedAt(endedAt)

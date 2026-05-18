@@ -13,10 +13,10 @@ import br.com.playercontabilidade.registroponto.exception.ColaboratorNotFoundExc
 import br.com.playercontabilidade.registroponto.repository.ColaboratorRepository;
 import br.com.playercontabilidade.registroponto.repository.JourneyRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -40,14 +40,14 @@ public class ManagerCollaboratorsService {
     private final AppTimeService appTimeService;
 
     @Transactional(readOnly = true)
-    public Slice<ManagerCollaboratorListItemResponse> list(String search, int page, int size) {
+    public Page<ManagerCollaboratorListItemResponse> list(String search, int page, int size) {
         String normalizedSearch = normalizeSearch(search);
         Pageable pageable = PageRequest.of(page, size);
-        Slice<Colaborator> collaborators = colaboratorRepository.findCollaboratorsForManager(
+        Page<Colaborator> collaborators = colaboratorRepository.findCollaboratorsForManager(
                 Role.COLLABORATOR, normalizedSearch, pageable);
 
         if (collaborators.isEmpty()) {
-            return new SliceImpl<>(List.of(), pageable, false);
+            return Page.empty(pageable);
         }
 
         List<Long> collaboratorIds = collaborators.getContent().stream()
@@ -67,7 +67,7 @@ public class ManagerCollaboratorsService {
             items.add(toListItem(colaborator, journeysByCollaborator.getOrDefault(colaborator.getId(), List.of()), now));
         }
 
-        return new SliceImpl<>(items, pageable, collaborators.hasNext());
+        return new PageImpl<>(items, collaborators.getPageable(), collaborators.getTotalElements());
     }
 
     @Transactional(readOnly = true)

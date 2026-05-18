@@ -2,10 +2,13 @@ package br.com.playercontabilidade.registroponto.controller;
 
 import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorDetailResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorListItemResponse;
+import br.com.playercontabilidade.registroponto.dto.ManagerJourneyDetailResponse;
+import br.com.playercontabilidade.registroponto.dto.ManagerJourneyListItemResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerOverviewResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerProfileResponse;
 import br.com.playercontabilidade.registroponto.service.JourneyService;
 import br.com.playercontabilidade.registroponto.service.ManagerCollaboratorsService;
+import br.com.playercontabilidade.registroponto.service.ManagerJourneysService;
 import br.com.playercontabilidade.registroponto.service.ManagerOverviewService;
 import br.com.playercontabilidade.registroponto.service.ManagerService;
 import jakarta.validation.constraints.Min;
@@ -13,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,6 +40,7 @@ public class ManagerController {
     private final ManagerService managerService;
     private final ManagerOverviewService managerOverviewService;
     private final ManagerCollaboratorsService managerCollaboratorsService;
+    private final ManagerJourneysService managerJourneysService;
 
     @GetMapping("/manager")
     @Operation(
@@ -74,7 +79,7 @@ public class ManagerController {
                     """
     )
     @SecurityRequirement(name = "bearerAuth")
-    public Slice<ManagerCollaboratorListItemResponse> listCollaborators(
+    public Page<ManagerCollaboratorListItemResponse> listCollaborators(
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(required = false) @Min(1) Integer size) {
@@ -94,5 +99,42 @@ public class ManagerController {
     @SecurityRequirement(name = "bearerAuth")
     public ManagerCollaboratorDetailResponse getCollaborator(@PathVariable Long id) {
         return managerCollaboratorsService.getById(id);
+    }
+
+    @GetMapping("/manager/journeys")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Lista jornadas registradas",
+            description = """
+                    Retorna jornadas de colaboradores no período informado.
+                    Sem datas, utiliza o dia atual no fuso da aplicação.
+                    Filtro opcional por nome do colaborador (contains, case-insensitive).
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public Page<ManagerJourneyListItemResponse> listJourneys(
+            @RequestParam(value = "start_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(value = "end_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(value = "collaborator_name", required = false) String collaboratorName,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) @Min(1) Integer size) {
+        int pageSize = size != null ? size : JourneyService.DEFAULT_PAGE_SIZE;
+        return managerJourneysService.list(startDate, endDate, collaboratorName, page, pageSize);
+    }
+
+    @GetMapping("/manager/journeys/{id}")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Detalhe da jornada",
+            description = """
+                    Retorna a jornada completa com atividades planejadas e não planejadas.
+                    Em andamento, ended_at, duration_seconds e summary vêm como null.
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public ManagerJourneyDetailResponse getJourney(@PathVariable Long id) {
+        return managerJourneysService.getById(id);
     }
 }

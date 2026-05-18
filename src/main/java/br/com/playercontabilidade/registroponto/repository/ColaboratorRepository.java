@@ -2,7 +2,7 @@ package br.com.playercontabilidade.registroponto.repository;
 
 import br.com.playercontabilidade.registroponto.entity.Colaborator;
 import br.com.playercontabilidade.registroponto.entity.Role;
-import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,14 +20,21 @@ public interface ColaboratorRepository extends JpaRepository<Colaborator, Long> 
 
     Optional<Colaborator> findByIdAndUser_Role(Long id, Role role);
 
-    @Query("""
-            SELECT c FROM Colaborator c
-            JOIN c.user u
-            WHERE u.role = :role
-              AND (:search IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :search, '%')))
-            ORDER BY c.firstName ASC, c.id ASC
-            """)
-    Slice<Colaborator> findCollaboratorsForManager(
+    @Query(
+            value = """
+                    SELECT c FROM Colaborator c
+                    JOIN c.user u
+                    WHERE u.role = :role
+                      AND (:search IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :search, '%')))
+                    ORDER BY c.firstName ASC, c.id ASC
+                    """,
+            countQuery = """
+                    SELECT COUNT(c) FROM Colaborator c
+                    JOIN c.user u
+                    WHERE u.role = :role
+                      AND (:search IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :search, '%')))
+                    """)
+    Page<Colaborator> findCollaboratorsForManager(
             @Param("role") Role role,
             @Param("search") String search,
             Pageable pageable);

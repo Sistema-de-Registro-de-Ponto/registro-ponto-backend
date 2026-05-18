@@ -137,8 +137,10 @@ Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael
 | GET    | `/v1/manager/overview`                | Bearer | qualquer | Indicadores agregados do dashboard no período (200)                       |
 | GET    | `/v1/manager/collaborators`           | Bearer | MANAGER  | Lista colaboradores (`COLLABORATOR`) com métricas do dia, paginada (200)  |
 | GET    | `/v1/manager/collaborators/{id}`      | Bearer | MANAGER  | Detalhe do colaborador e jornada em andamento, se houver (200)            |
+| GET    | `/v1/manager/journeys`                | Bearer | MANAGER  | Lista jornadas no período, com filtro opcional por nome (200)             |
+| GET    | `/v1/manager/journeys/{id}`           | Bearer | MANAGER  | Detalhe da jornada com atividades (200)                                   |
 
-Usuário sem linha em `managers` em `GET /v1/manager` retorna **404** (`ProblemDetail`, título `Gerente não encontrado`). Endpoints de colaboradores com token de role `COLLABORATOR` retornam **403**.
+Usuário sem linha em `managers` em `GET /v1/manager` retorna **404** (`ProblemDetail`, título `Gerente não encontrado`). Endpoints de colaboradores e jornadas com token de role `COLLABORATOR` retornam **403**.
 
 #### Perfil do gerente
 
@@ -195,7 +197,7 @@ Retorna apenas usuários com role `COLLABORATOR`. Métricas referem-se ao **dia 
 | `page`   | não         | `0`     | Página (0-based)                               |
 | `size`   | não         | `20`    | Itens por página                               |
 
-Paginação no formato Spring `Slice` (`content`, `last`, `number`, `size`, etc.), igual a `GET /v1/journeys`.
+Paginação no formato Spring `Page` (`content`, `totalElements`, `totalPages`, `last`, `number`, etc.), igual a `GET /v1/manager/journeys`.
 
 ```bash
 curl "http://localhost:8080/v1/manager/collaborators?search=nat&page=0&size=10" \
@@ -215,22 +217,43 @@ Resposta esperada (200):
       "adherence_percentage": 50
     }
   ],
-  "number": 0,
-  "size": 10,
-  "number_of_elements": 1,
-  "first": true,
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 10,
+    "sort": { "sorted": true, "unsorted": false, "empty": false },
+    "offset": 0,
+    "paged": true,
+    "unpaged": false
+  },
+  "totalElements": 1,
+  "totalPages": 1,
   "last": true,
-  "empty": false
+  "first": true,
+  "size": 10,
+  "number": 0,
+  "numberOfElements": 1,
+  "empty": false,
+  "sort": { "sorted": true, "unsorted": false, "empty": false }
 }
 ```
 
-| Campo                      | Descrição                                                                 |
+| Campo (item em `content`)  | Descrição                                                                 |
 |----------------------------|---------------------------------------------------------------------------|
 | `id`                       | ID em `colaborators`                                                      |
 | `first_name`               | Nome cadastrado do colaborador                                            |
 | `current_journey_status`   | `in_progress` (jornada aberta hoje), `completed` (finalizou hoje, sem aberta) ou `none` |
 | `hours_today_seconds`      | Soma das jornadas `completed` hoje + tempo decorrido da `in_progress`     |
 | `adherence_percentage`     | % de atividades planejadas marcadas na jornada **em andamento**; `null` se não houver jornada aberta ou sem atividades planejadas |
+
+| Campo (paginação)  | Descrição                                      |
+|--------------------|------------------------------------------------|
+| `totalElements`    | Total de colaboradores (com filtro `search`)   |
+| `totalPages`       | Total de páginas                               |
+| `number`           | Página atual (0-based)                         |
+| `size`             | Tamanho da página                              |
+| `numberOfElements` | Itens em `content` nesta página                 |
+| `last` / `first`   | Última / primeira página                       |
+| `empty`            | Sem colaboradores na consulta                  |
 
 #### Detalhe do colaborador
 
@@ -265,6 +288,158 @@ Resposta esperada (200):
 ```
 
 `current_journey` segue o mesmo JSON de `GET /v1/journeys/current` (`JourneyResponse`); é `null` quando não há jornada em andamento. Colaborador inexistente ou que não seja `COLLABORATOR` retorna **404** (`ProblemDetail`, título `Colaborador não encontrado`).
+
+#### Consulta de jornadas
+
+Lista e detalhe de jornadas de **todos** os colaboradores (`COLLABORATOR`). O filtro de período usa `started_at` no fuso `APP_TIME_ZONE` (inclusive nos extremos). Sem `start_date` e `end_date`, usa o **dia atual**. Não há busca livre por texto nem campo de aderência na listagem.
+
+| Query               | Obrigatório | Default | Descrição                                              |
+|---------------------|-------------|---------|--------------------------------------------------------|
+| `start_date`        | não         | hoje    | Início do período (`YYYY-MM-DD`)                       |
+| `end_date`          | não         | hoje    | Fim do período (`YYYY-MM-DD`)                          |
+| `collaborator_name` | não         | —       | Filtro parcial por nome do colaborador (case insensitive) |
+| `page`              | não         | `0`     | Página (0-based)                                       |
+| `size`              | não         | `20`    | Itens por página                                       |
+
+`start_date` posterior a `end_date` retorna **400** (`ProblemDetail`, título `Requisição inválida`).
+
+**Exemplo — listagem (hoje):**
+
+```bash
+curl "http://localhost:8080/v1/manager/journeys?page=0&size=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+**Exemplo — período e filtro por nome:**
+
+```bash
+curl "http://localhost:8080/v1/manager/journeys?start_date=2025-05-01&end_date=2025-05-14&collaborator_name=Maria&page=0&size=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200) — envelope Spring `Page` (inclui total de registros):
+
+```json
+{
+  "content": [
+    {
+      "id": 42,
+      "journey_date": "2025-05-14",
+      "collaborator_id": 1,
+      "collaborator_first_name": "Maria Silva",
+      "started_at": "2025-05-14T08:03:00-03:00",
+      "ended_at": null,
+      "duration_seconds": 8460,
+      "status": "in_progress"
+    },
+    {
+      "id": 41,
+      "journey_date": "2025-05-13",
+      "collaborator_id": 2,
+      "collaborator_first_name": "João Santos",
+      "started_at": "2025-05-13T08:10:00-03:00",
+      "ended_at": "2025-05-13T18:12:00-03:00",
+      "duration_seconds": 36120,
+      "status": "completed"
+    }
+  ],
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 10,
+    "sort": { "sorted": true, "unsorted": false, "empty": false },
+    "offset": 0,
+    "paged": true,
+    "unpaged": false
+  },
+  "totalElements": 25,
+  "totalPages": 3,
+  "last": false,
+  "first": true,
+  "size": 10,
+  "number": 0,
+  "numberOfElements": 2,
+  "empty": false,
+  "sort": { "sorted": true, "unsorted": false, "empty": false }
+}
+```
+
+| Campo (item em `content`) | Descrição                                                                 |
+|---------------------------|---------------------------------------------------------------------------|
+| `id`                      | ID da jornada (detalhe: `GET /v1/manager/journeys/{id}`)                  |
+| `journey_date`            | Data da jornada (`YYYY-MM-DD`, derivada de `started_at`)                  |
+| `collaborator_id`         | ID em `colaborators`                                                      |
+| `collaborator_first_name` | Nome do colaborador                                                       |
+| `started_at`              | Entrada (ISO-8601 com fuso da aplicação)                                  |
+| `ended_at`                | Saída; `null` se em andamento                                             |
+| `duration_seconds`        | Total em segundos; em andamento = tempo decorrido desde `started_at`      |
+| `status`                  | `in_progress` ou `completed`                                              |
+
+| Campo (paginação)   | Descrição                                                                 |
+|---------------------|---------------------------------------------------------------------------|
+| `content`           | Itens da página atual                                                     |
+| `totalElements`     | Total de jornadas no período/filtro (ex.: “de 25”)                        |
+| `totalPages`        | Total de páginas com o `size` informado                                   |
+| `number`            | Página atual (0-based); próxima requisição: `page = number + 1`          |
+| `size`              | Tamanho da página                                                         |
+| `numberOfElements`  | Quantidade de itens em `content` nesta página                             |
+| `first` / `last`    | Primeira / última página                                                  |
+| `empty`             | `true` se não houver jornadas no período                                  |
+
+Texto “1–7 de 25” no front: `início = number * size + 1`, `fim = number * size + numberOfElements`, `total = totalElements` (ajustar quando `empty`).
+
+**Exemplo — detalhe da jornada:**
+
+```bash
+curl http://localhost:8080/v1/manager/journeys/42 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200) — em andamento (`ended_at`, `duration_seconds` e `summary` como `null`):
+
+```json
+{
+  "id": 42,
+  "collaborator_id": 1,
+  "collaborator_first_name": "Maria Silva",
+  "started_at": "2025-05-14T08:03:00-03:00",
+  "ended_at": null,
+  "duration_seconds": null,
+  "summary": null,
+  "status": "in_progress",
+  "journey_planned_activities": [
+    {
+      "id": 101,
+      "planned_activity_id": 5,
+      "description": "Revisar relatórios",
+      "is_checked": true
+    }
+  ],
+  "unplanned_activities": [],
+  "created_at": "2025-05-14T08:03:00-03:00",
+  "updated_at": "2025-05-14T10:15:00-03:00"
+}
+```
+
+Resposta esperada (200) — finalizada:
+
+```json
+{
+  "id": 41,
+  "collaborator_id": 2,
+  "collaborator_first_name": "João Santos",
+  "started_at": "2025-05-13T08:10:00-03:00",
+  "ended_at": "2025-05-13T18:12:00-03:00",
+  "duration_seconds": 36120,
+  "summary": "Dia produtivo.",
+  "status": "completed",
+  "journey_planned_activities": [],
+  "unplanned_activities": [],
+  "created_at": "2025-05-13T08:10:00-03:00",
+  "updated_at": "2025-05-13T18:12:00-03:00"
+}
+```
+
+Jornada inexistente retorna **404** (`ProblemDetail`, título `Jornada não encontrada`).
 
 **Exemplo de login do gerente:**
 

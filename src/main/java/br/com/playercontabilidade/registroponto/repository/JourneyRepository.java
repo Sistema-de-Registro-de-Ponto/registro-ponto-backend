@@ -2,8 +2,10 @@ package br.com.playercontabilidade.registroponto.repository;
 
 import br.com.playercontabilidade.registroponto.entity.Journey;
 import br.com.playercontabilidade.registroponto.entity.JourneyStatus;
-import org.springframework.data.domain.Slice;
+import br.com.playercontabilidade.registroponto.entity.Role;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -98,4 +100,40 @@ public interface JourneyRepository extends JpaRepository<Journey, Long> {
             @Param("colaboratorId") Long colaboratorId,
             @Param("startedAtFrom") Instant startedAtFrom,
             @Param("startedAtToExclusive") Instant startedAtToExclusive);
+
+    @Query(
+            value = """
+                    SELECT j FROM Journey j
+                    JOIN FETCH j.colaborator c
+                    JOIN c.user u
+                    WHERE u.role = :role
+                      AND j.startedAt >= :startedAtFrom
+                      AND j.startedAt < :startedAtToExclusive
+                      AND (:collaboratorName IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :collaboratorName, '%')))
+                    ORDER BY j.startedAt DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(j) FROM Journey j
+                    JOIN j.colaborator c
+                    JOIN c.user u
+                    WHERE u.role = :role
+                      AND j.startedAt >= :startedAtFrom
+                      AND j.startedAt < :startedAtToExclusive
+                      AND (:collaboratorName IS NULL OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :collaboratorName, '%')))
+                    """)
+    Page<Journey> findForManager(
+            @Param("role") Role role,
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive,
+            @Param("collaboratorName") String collaboratorName,
+            Pageable pageable);
+
+    @Query("""
+            SELECT j FROM Journey j
+            JOIN FETCH j.colaborator c
+            JOIN c.user u
+            WHERE j.id = :id
+              AND u.role = :role
+            """)
+    Optional<Journey> findByIdForManager(@Param("id") Long id, @Param("role") Role role);
 }
