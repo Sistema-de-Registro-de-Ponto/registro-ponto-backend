@@ -1,0 +1,34 @@
+---
+description: Manter documentação alinhada quando o código mudar comportamento ou contrato da API
+alwaysApply: true
+---
+
+# Documentação alinhada ao código
+
+Sempre que uma alteração **refletir no comportamento**, **contrato da API** ou **configuração** visível a outros devs/front:
+
+1. **Atualizar ou incluir documentação na mesma entrega** — não deixar só o código.
+2. **README.md** é a referência principal deste backend:
+   - novos/alterados endpoints (`controller`, DTOs, query params, códigos HTTP);
+   - mudanças de regras de negócio que o cliente consome;
+   - variáveis de ambiente, seeds, migrações Flyway relevantes.
+3. **Swagger/OpenAPI**: se o endpoint já está anotado com `@Operation`, manter summary/description coerentes com o comportamento real.
+4. **Testes**: quando a mudança for de API, incluir ou ajustar testes de controller que documentem o contrato esperado.
+
+## Quando documentar
+
+- Novo endpoint, campo JSON, parâmetro ou enum na resposta.
+- Remoção ou renomeação de campo/param (mencionar breaking change no README).
+- Mudança de autorização (roles), validação ou status HTTP.
+- Alteração de cálculo/métrica exposta (ex.: aderência, horas do dia).
+
+## O que não fazer
+
+- Não criar arquivos markdown extras sem necessidade — preferir atualizar o README existente.
+- Não documentar refactors internos que não mudam contrato nem operação.
+
+## Checklist antes de concluir a tarefa
+
+- [ ] README reflete o estado atual da API afetada?
+- [ ] Exemplos de request/response e curl estão corretos?
+- [ ] Front/consumidores teriam informação suficiente só lendo a doc?

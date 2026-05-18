@@ -25,6 +25,8 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -88,6 +90,163 @@ class ManagerControllerTest {
     void deveRetornar401SemToken() throws Exception {
         mockMvc.perform(get("/v1/manager"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deveListarColaboradoresParaGerente() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators")
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].first_name").value("Natanael"))
+                .andExpect(jsonPath("$.content[0].current_journey_status").value("none"))
+                .andExpect(jsonPath("$.content[0].hours_today_seconds").value(0))
+                .andExpect(jsonPath("$.content[0].adherence_percentage").value(nullValue()));
+    }
+
+    @Test
+    void deveFiltrarColaboradoresPorNome() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("search", "nata"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].first_name").value("Natanael"));
+
+        mockMvc.perform(get("/v1/manager/collaborators")
+                        .header("Authorization", "Bearer " + gerenteToken)
+                        .param("search", "inexistente"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.empty").value(true));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveListarColaboradorComJornadaEmAndamentoEAderencia() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa A\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa B\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isCreated());
+
+        String journeyBody = mockMvc.perform(get("/v1/journeys/current")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        long firstActivityId = objectMapper.readTree(journeyBody)
+                .get("journey_planned_activities").get(0).get("id").asLong();
+
+        mockMvc.perform(put("/v1/journeys/activities/planned/" + firstActivityId)
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"is_checked\":true}"))
+                .andExpect(status().isOk());
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators")
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].current_journey_status").value("in_progress"))
+                .andExpect(jsonPath("$.content[0].adherence_percentage").value(50))
+                .andExpect(jsonPath("$.content[0].hours_today_seconds").value(greaterThanOrEqualTo(0)));
+    }
+
+    @Test
+    void deveRetornar403QuandoColaboradorListaColaboradores() throws Exception {
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/manager/collaborators")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deveRetornar401AoListarColaboradoresSemToken() throws Exception {
+        mockMvc.perform(get("/v1/manager/collaborators"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deveRetornarDetalheDoColaboradorParaGerente() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators/" + colaborador.getId())
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(colaborador.getId()))
+                .andExpect(jsonPath("$.first_name").value("Natanael"))
+                .andExpect(jsonPath("$.user_id").isNumber())
+                .andExpect(jsonPath("$.current_journey").value(nullValue()))
+                .andExpect(jsonPath("$.adherence_percentage").value(nullValue()));
+    }
+
+    @Test
+    @DirtiesContext
+    void deveRetornarDetalheComJornadaEmAndamento() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(post("/v1/activities/planned")
+                        .header("Authorization", "Bearer " + colaboradorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Tarefa única\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/journeys/start")
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isCreated());
+
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators/" + colaborador.getId())
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.current_journey.status").value("in_progress"))
+                .andExpect(jsonPath("$.current_journey.journey_planned_activities", hasSize(1)))
+                .andExpect(jsonPath("$.adherence_percentage").value(0));
+    }
+
+    @Test
+    void deveRetornar404QuandoColaboradorNaoExisteNoDetalhe() throws Exception {
+        String gerenteToken = loginAndGetToken("gerente", "87654321");
+
+        mockMvc.perform(get("/v1/manager/collaborators/99999")
+                        .header("Authorization", "Bearer " + gerenteToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Colaborador não encontrado"));
+    }
+
+    @Test
+    void deveRetornar403QuandoColaboradorAcessaDetalheDeOutro() throws Exception {
+        Colaborator colaborador = colaboratorRepository.findByUser_Username("colaborador")
+                .orElseThrow();
+        String colaboradorToken = loginAndGetToken("colaborador", "12345678");
+
+        mockMvc.perform(get("/v1/manager/collaborators/" + colaborador.getId())
+                        .header("Authorization", "Bearer " + colaboradorToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test

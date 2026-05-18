@@ -1,16 +1,25 @@
 package br.com.playercontabilidade.registroponto.controller;
 
+import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorDetailResponse;
+import br.com.playercontabilidade.registroponto.dto.ManagerCollaboratorListItemResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerOverviewResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerProfileResponse;
+import br.com.playercontabilidade.registroponto.service.JourneyService;
+import br.com.playercontabilidade.registroponto.service.ManagerCollaboratorsService;
 import br.com.playercontabilidade.registroponto.service.ManagerOverviewService;
 import br.com.playercontabilidade.registroponto.service.ManagerService;
+import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Slice;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,11 +29,13 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/v1")
 @RequiredArgsConstructor
+@Validated
 @Tag(name = "Gerente", description = "Dados do gerente vinculado ao usuário autenticado")
 public class ManagerController {
 
     private final ManagerService managerService;
     private final ManagerOverviewService managerOverviewService;
+    private final ManagerCollaboratorsService managerCollaboratorsService;
 
     @GetMapping("/manager")
     @Operation(
@@ -51,5 +62,37 @@ public class ManagerController {
             @RequestParam(value = "end_date", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return managerOverviewService.getOverview(startDate, endDate);
+    }
+
+    @GetMapping("/manager/collaborators")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Lista colaboradores da equipe",
+            description = """
+                    Retorna colaboradores cadastrados (role COLLABORATOR) com métricas do dia atual.
+                    Aderência calculada apenas para jornada em andamento.
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public Slice<ManagerCollaboratorListItemResponse> listCollaborators(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) @Min(1) Integer size) {
+        int pageSize = size != null ? size : JourneyService.DEFAULT_PAGE_SIZE;
+        return managerCollaboratorsService.list(search, page, pageSize);
+    }
+
+    @GetMapping("/manager/collaborators/{id}")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Detalhe do colaborador",
+            description = """
+                    Retorna dados do colaborador e a jornada em andamento (se houver).
+                    Aderência calculada apenas para jornada em andamento.
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public ManagerCollaboratorDetailResponse getCollaborator(@PathVariable Long id) {
+        return managerCollaboratorsService.getById(id);
     }
 }

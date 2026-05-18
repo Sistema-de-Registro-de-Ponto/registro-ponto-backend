@@ -236,6 +236,11 @@ public class JourneyService {
                         "Não existe colaborador associado ao usuário autenticado."));
     }
 
+    @Transactional(readOnly = true)
+    public JourneyResponse mapToResponse(Journey journey) {
+        return toResponse(journey);
+    }
+
     private JourneyResponse toResponse(Journey journey) {
         List<JourneyPlannedActivityItemResponse> plannedActivities = journey.getPlannedActivities()
                 .stream()

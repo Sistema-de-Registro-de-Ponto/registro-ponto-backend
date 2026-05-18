@@ -127,6 +127,153 @@ curl http://localhost:8080/v1/collaborator \
 
 Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael"}` (valores conforme o banco e o seed).
 
+### Endpoints do gerente
+
+Área de gestão para usuários com role `MANAGER` (credencial de teste: `gerente` / `87654321`). O token JWT identifica o usuário pelo **username**; o perfil consulta a tabela `managers` pelo `user_id` correspondente.
+
+| Método | Endpoint                              | Auth   | Role     | Descrição                                                                 |
+|--------|---------------------------------------|--------|----------|---------------------------------------------------------------------------|
+| GET    | `/v1/manager`                         | Bearer | qualquer | Perfil do gerente autenticado → `{ user_id, first_name }` (200)           |
+| GET    | `/v1/manager/overview`                | Bearer | qualquer | Indicadores agregados do dashboard no período (200)                       |
+| GET    | `/v1/manager/collaborators`           | Bearer | MANAGER  | Lista colaboradores (`COLLABORATOR`) com métricas do dia, paginada (200)  |
+| GET    | `/v1/manager/collaborators/{id}`      | Bearer | MANAGER  | Detalhe do colaborador e jornada em andamento, se houver (200)            |
+
+Usuário sem linha em `managers` em `GET /v1/manager` retorna **404** (`ProblemDetail`, título `Gerente não encontrado`). Endpoints de colaboradores com token de role `COLLABORATOR` retornam **403**.
+
+#### Perfil do gerente
+
+```bash
+curl http://localhost:8080/v1/manager \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200): `{"user_id":2,"first_name":"Gerente"}`
+
+#### Visão geral (dashboard)
+
+Agrega métricas de **todas** as jornadas cujo `started_at` cai no intervalo informado (inclusive nos extremos, fuso `APP_TIME_ZONE`). Sem `start_date` e `end_date`, usa o **dia atual**.
+
+| Query         | Obrigatório | Descrição                                      |
+|---------------|-------------|------------------------------------------------|
+| `start_date`  | não         | Início do período (`YYYY-MM-DD`)               |
+| `end_date`    | não         | Fim do período (`YYYY-MM-DD`)                  |
+
+`start_date` posterior a `end_date` retorna **400** (`ProblemDetail`, título `Requisição inválida`).
+
+```bash
+curl "http://localhost:8080/v1/manager/overview?start_date=2026-05-01&end_date=2026-05-18" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200):
+
+```json
+{
+  "duration_seconds": 12600,
+  "journeys_progress": 1,
+  "average_adherence_percentage": 75,
+  "activities_completed": 3,
+  "unplanned_activities": 2
+}
+```
+
+| Campo                           | Descrição                                                                 |
+|---------------------------------|---------------------------------------------------------------------------|
+| `duration_seconds`              | Soma de `duration_seconds` das jornadas `completed` no período            |
+| `journeys_progress`             | Quantidade de jornadas `in_progress` com `started_at` no período        |
+| `average_adherence_percentage`  | Média inteira da aderência por jornada com atividades planejadas (0 se nenhuma) |
+| `activities_completed`          | Atividades planejadas da jornada marcadas (`is_checked` true) no período |
+| `unplanned_activities`          | Total de atividades não planejadas registradas no período               |
+
+#### Listagem de colaboradores
+
+Retorna apenas usuários com role `COLLABORATOR`. Métricas referem-se ao **dia atual** (`APP_TIME_ZONE`).
+
+| Query    | Obrigatório | Default | Descrição                                      |
+|----------|-------------|---------|------------------------------------------------|
+| `search` | não         | —       | Filtro parcial por `first_name` (case insensitive) |
+| `page`   | não         | `0`     | Página (0-based)                               |
+| `size`   | não         | `20`    | Itens por página                               |
+
+Paginação no formato Spring `Slice` (`content`, `last`, `number`, `size`, etc.), igual a `GET /v1/journeys`.
+
+```bash
+curl "http://localhost:8080/v1/manager/collaborators?search=nat&page=0&size=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200):
+
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "first_name": "Natanael",
+      "current_journey_status": "in_progress",
+      "hours_today_seconds": 8100,
+      "adherence_percentage": 50
+    }
+  ],
+  "number": 0,
+  "size": 10,
+  "number_of_elements": 1,
+  "first": true,
+  "last": true,
+  "empty": false
+}
+```
+
+| Campo                      | Descrição                                                                 |
+|----------------------------|---------------------------------------------------------------------------|
+| `id`                       | ID em `colaborators`                                                      |
+| `first_name`               | Nome cadastrado do colaborador                                            |
+| `current_journey_status`   | `in_progress` (jornada aberta hoje), `completed` (finalizou hoje, sem aberta) ou `none` |
+| `hours_today_seconds`      | Soma das jornadas `completed` hoje + tempo decorrido da `in_progress`     |
+| `adherence_percentage`     | % de atividades planejadas marcadas na jornada **em andamento**; `null` se não houver jornada aberta ou sem atividades planejadas |
+
+#### Detalhe do colaborador
+
+```bash
+curl http://localhost:8080/v1/manager/collaborators/1 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200):
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "first_name": "Natanael",
+  "hours_today_seconds": 8100,
+  "adherence_percentage": 50,
+  "current_journey": {
+    "id": 42,
+    "collaborator_id": 1,
+    "started_at": "2026-05-18T08:00:00-03:00",
+    "ended_at": null,
+    "duration_seconds": null,
+    "summary": null,
+    "status": "in_progress",
+    "journey_planned_activities": [],
+    "unplanned_activities": [],
+    "created_at": "2026-05-18T08:00:00-03:00",
+    "updated_at": "2026-05-18T08:00:00-03:00"
+  }
+}
+```
+
+`current_journey` segue o mesmo JSON de `GET /v1/journeys/current` (`JourneyResponse`); é `null` quando não há jornada em andamento. Colaborador inexistente ou que não seja `COLLABORATOR` retorna **404** (`ProblemDetail`, título `Colaborador não encontrado`).
+
+**Exemplo de login do gerente:**
+
+```bash
+curl -X POST http://localhost:8080/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"gerente","password":"87654321"}'
+```
+
 ### Endpoints de atividades planejadas
 
 Permitem ao colaborador informar o que pretende fazer **antes de iniciar a jornada**. Cada registro fica na tabela `planned_activities` (`id`, `collaborator_id`, `description`, `created_at`, `updated_at`), sempre vinculado ao colaborador do token JWT.
@@ -391,4 +538,5 @@ mvn test -Dtest=PlannedActivityControllerTest
 mvn test -Dtest=JourneyControllerTest
 mvn test -Dtest=JourneyPlannedActivityControllerTest
 mvn test -Dtest=JourneyUnplannedActivityControllerTest
+mvn test -Dtest=ManagerControllerTest
 ```
