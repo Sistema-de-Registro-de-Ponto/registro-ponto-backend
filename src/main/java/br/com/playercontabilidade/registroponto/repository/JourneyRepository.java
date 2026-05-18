@@ -5,9 +5,12 @@ import br.com.playercontabilidade.registroponto.entity.JourneyStatus;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -26,4 +29,37 @@ public interface JourneyRepository extends JpaRepository<Journey, Long> {
             Instant startedAtFrom,
             Instant startedAtToExclusive,
             Pageable pageable);
+
+    @Query("""
+            SELECT COALESCE(SUM(j.durationSeconds), 0)
+            FROM Journey j
+            WHERE j.startedAt >= :startedAtFrom
+              AND j.startedAt < :startedAtToExclusive
+              AND j.status = br.com.playercontabilidade.registroponto.entity.JourneyStatus.COMPLETED
+            """)
+    long sumDurationSecondsByStartedAtBetween(
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive);
+
+    @Query("""
+            SELECT COUNT(j)
+            FROM Journey j
+            WHERE j.startedAt >= :startedAtFrom
+              AND j.startedAt < :startedAtToExclusive
+              AND j.status = br.com.playercontabilidade.registroponto.entity.JourneyStatus.IN_PROGRESS
+            """)
+    long countInProgressByStartedAtBetween(
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive);
+
+    @Query("""
+            SELECT DISTINCT j
+            FROM Journey j
+            LEFT JOIN FETCH j.plannedActivities
+            WHERE j.startedAt >= :startedAtFrom
+              AND j.startedAt < :startedAtToExclusive
+            """)
+    List<Journey> findByStartedAtBetweenWithPlannedActivities(
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive);
 }

@@ -3,8 +3,11 @@ package br.com.playercontabilidade.registroponto.repository;
 import br.com.playercontabilidade.registroponto.entity.JourneyPlannedActivity;
 import br.com.playercontabilidade.registroponto.entity.JourneyStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Optional;
 
 @Repository
@@ -14,4 +17,15 @@ public interface JourneyPlannedActivityRepository extends JpaRepository<JourneyP
             Long id,
             Long collaboratorId,
             JourneyStatus status);
+
+    @Query("""
+            SELECT COUNT(jpa)
+            FROM JourneyPlannedActivity jpa
+            WHERE jpa.checked = true
+              AND jpa.journey.startedAt >= :startedAtFrom
+              AND jpa.journey.startedAt < :startedAtToExclusive
+            """)
+    long countCheckedByJourneyStartedAtBetween(
+            @Param("startedAtFrom") Instant startedAtFrom,
+            @Param("startedAtToExclusive") Instant startedAtToExclusive);
 }
