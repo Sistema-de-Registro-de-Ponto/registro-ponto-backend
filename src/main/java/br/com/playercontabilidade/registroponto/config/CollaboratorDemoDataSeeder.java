@@ -38,6 +38,7 @@ public class CollaboratorDemoDataSeeder implements CommandLineRunner {
 
     private static final LocalTime WORKDAY_START = LocalTime.of(8, 0);
     private static final LocalTime WORKDAY_END = LocalTime.of(17, 0);
+    private static final int DEFAULT_JOURNEY_COUNT = 60;
 
     private final CollaboratorDemoSeedProperties properties;
     private final UserRepository userRepository;
@@ -49,21 +50,31 @@ public class CollaboratorDemoDataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        int journeyCount = properties.journeyCount();
-        Colaborator colaborator = resolveColaborator();
+        for (CollaboratorDemoProfile profile : properties.collaborators()) {
+            seedCollaborator(profile);
+        }
+    }
+
+    private void seedCollaborator(CollaboratorDemoProfile profile) {
+        List<LocalDate> weekdays = resolveWeekdays(profile);
+        int journeyCount = weekdays.size();
+        Colaborator colaborator = resolveColaborator(profile);
+
         long existing = journeyRepository.countByColaborator_IdAndStatus(
                 colaborator.getId(), JourneyStatus.COMPLETED);
         if (existing >= journeyCount) {
-            log.info("Seed collaborator-demo: {} jornadas completed já existem; ignorando.", existing);
+            log.info(
+                    "Seed collaborator-demo: {} jornadas completed já existem para '{}'; ignorando.",
+                    existing,
+                    profile.username());
             return;
         }
 
-        List<LocalDate> weekdays = collectWeekdaysEndingOn(properties.anchorDate(), journeyCount);
         List<JourneyActivitySpec> specs = buildActivitySpecs(journeyCount);
         if (weekdays.size() != specs.size()) {
             throw new IllegalStateException(
-                    "Seed collaborator-demo: quantidade de datas (%d) difere dos perfis (%d)."
-                            .formatted(weekdays.size(), specs.size()));
+                    "Seed collaborator-demo: quantidade de datas (%d) difere dos perfis (%d) para '%s'."
+                            .formatted(weekdays.size(), specs.size(), profile.username()));
         }
 
         ZoneId zone = appTimeService.zone();
@@ -75,16 +86,28 @@ public class CollaboratorDemoDataSeeder implements CommandLineRunner {
         log.info(
                 "Seed collaborator-demo: criou {} jornadas completed para '{}'.",
                 journeyCount,
-                properties.username());
+                profile.username());
     }
 
-    private Colaborator resolveColaborator() {
-        String username = properties.username();
+    private List<LocalDate> resolveWeekdays(CollaboratorDemoProfile profile) {
+        LocalDate anchor = profile.anchorDate() != null
+                ? profile.anchorDate()
+                : appTimeService.now().toLocalDate();
+        if (profile.monthOnly()) {
+            return collectWeekdaysFromTo(anchor.withDayOfMonth(1), anchor);
+        }
+        int count = profile.journeyCount() != null ? profile.journeyCount() : DEFAULT_JOURNEY_COUNT;
+        return collectWeekdaysEndingOn(anchor, count);
+    }
+
+    private Colaborator resolveColaborator(CollaboratorDemoProfile profile) {
+        String username = profile.username();
+        String password = profile.resolvePassword(properties.defaultPassword());
         User user = userRepository.findByUsername(username)
                 .orElseGet(() -> {
                     User created = User.builder()
                             .username(username)
-                            .password(passwordEncoder.encode(properties.password()))
+                            .password(passwordEncoder.encode(password))
                             .role(Role.COLLABORATOR)
                             .build();
                     User saved = userRepository.save(created);
@@ -96,7 +119,7 @@ public class CollaboratorDemoDataSeeder implements CommandLineRunner {
                 .orElseGet(() -> {
                     Colaborator created = Colaborator.builder()
                             .user(user)
-                            .firstName(properties.firstName())
+                            .firstName(profile.firstName())
                             .build();
                     Colaborator saved = colaboratorRepository.save(created);
                     log.info("Seed collaborator-demo: criou colaborador para '{}'.", username);
@@ -117,18 +140,40 @@ public class CollaboratorDemoDataSeeder implements CommandLineRunner {
         return dates;
     }
 
-    private static List<JourneyActivitySpec> buildActivitySpecs(int journeyCount) {
-        if (journeyCount != 60) {
-            throw new IllegalStateException(
-                    "Seed collaborator-demo: journey-count=%d não suportado; use 60.".formatted(journeyCount));
+    private static List<LocalDate> collectWeekdaysFromTo(LocalDate startInclusive, LocalDate endInclusive) {
+        List<LocalDate> dates = new ArrayList<>();
+        LocalDate cursor = startInclusive;
+        while (!cursor.isAfter(endInclusive)) {
+            DayOfWeek day = cursor.getDayOfWeek();
+            if (day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY) {
+                dates.add(cursor);
+            }
+            cursor = cursor.plusDays(1);
         }
+        return dates;
+    }
+
+    private static List<JourneyActivitySpec> buildActivitySpecs(int journeyCount) {
+        if (journeyCount == 60) {
+            List<JourneyActivitySpec> specs = new ArrayList<>(journeyCount);
+            repeat(specs, 10, JourneyActivitySpec.of(10, 10, 0, 0));
+            repeat(specs, 10, JourneyActivitySpec.of(10, 10, 0, 0));
+            repeat(specs, 10, JourneyActivitySpec.of(15, 15, 0, 5));
+            repeat(specs, 10, JourneyActivitySpec.of(10, 0, 10, 0));
+            repeat(specs, 10, JourneyActivitySpec.of(5, 0, 5, 5));
+            repeat(specs, 10, JourneyActivitySpec.of(10, 5, 5, 5));
+            return specs;
+        }
+        List<JourneyActivitySpec> templates = List.of(
+                JourneyActivitySpec.of(10, 10, 0, 0),
+                JourneyActivitySpec.of(15, 15, 0, 5),
+                JourneyActivitySpec.of(10, 0, 10, 0),
+                JourneyActivitySpec.of(5, 0, 5, 5),
+                JourneyActivitySpec.of(10, 5, 5, 5));
         List<JourneyActivitySpec> specs = new ArrayList<>(journeyCount);
-        repeat(specs, 10, JourneyActivitySpec.of(10, 10, 0, 0));
-        repeat(specs, 10, JourneyActivitySpec.of(10, 10, 0, 0));
-        repeat(specs, 10, JourneyActivitySpec.of(15, 15, 0, 5));
-        repeat(specs, 10, JourneyActivitySpec.of(10, 0, 10, 0));
-        repeat(specs, 10, JourneyActivitySpec.of(5, 0, 5, 5));
-        repeat(specs, 10, JourneyActivitySpec.of(10, 5, 5, 5));
+        for (int i = 0; i < journeyCount; i++) {
+            specs.add(templates.get(i % templates.size()));
+        }
         return specs;
     }
 

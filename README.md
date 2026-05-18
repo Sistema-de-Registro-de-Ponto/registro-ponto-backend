@@ -82,6 +82,15 @@ Dois usuários são criados automaticamente no startup pelo `DataSeeder`, caso a
 
 A senha é armazenada como hash BCrypt; o seed é idempotente (não duplica usuário nem colaborador se já existirem). Para cada usuário de teste é criada uma linha em `colaborators` com `first_name` (`Natanael` / `Gerente`) quando ainda não existir.
 
+Com o perfil `local` (`application-local.yml`) ou `APP_SEED_COLLABORATOR_DEMO=true`, o `CollaboratorDemoDataSeeder` cria colaboradores adicionais com jornadas `completed` de demonstração:
+
+| Username | Senha      | Nome  | Jornadas                                                                 |
+|----------|------------|-------|--------------------------------------------------------------------------|
+| `natan`  | `12345678` | Natan | 60 dias úteis retroativos a partir de `anchor-date` (padrão local: 16/05/2026) |
+| `thais`  | `12345678` | Thais | Dias úteis do mês corrente até hoje (`month-only: true`)                 |
+
+O seed é idempotente por colaborador: se já existirem jornadas `completed` suficientes, não recria. Senha padrão configurável em `app.seed.collaborator-demo.default-password`.
+
 ### Fluxo da aplicação
 
 A autenticação é **stateless via JWT** (HS256, biblioteca `jjwt`):
