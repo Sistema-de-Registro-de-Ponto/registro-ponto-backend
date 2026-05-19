@@ -27,6 +27,7 @@ Backend para registro de ponto — Player Contabilidade.
 | `JWT_SECRET`        | (valor placeholder — troque em prod) | Segredo HS256 (>= 256 bits)        |
 | `JWT_EXPIRATION_MS` | `86400000`                           | Validade do token (ms)             |
 | `APP_TIME_ZONE`     | `America/Sao_Paulo`                  | Fuso da aplicação (API, Jackson e `AppTimeService`) |
+| `RPA_API_KEY`       | (placeholder — troque em prod)       | Chave do robô RPA no header `X-Rpa-Api-Key` |
 
 Datas na API são convertidas via `AppTimeService` (injete em qualquer service). O banco continua em UTC (`Instant`); na resposta JSON o horário sai com offset do fuso configurado (ex.: `-03:00`).
 
@@ -57,6 +58,8 @@ O schema é versionado em `src/main/resources/db/migration/`. Na subida da aplic
 |---------|----------|
 | `V1__init_schema.sql` | Schema completo para banco **novo** |
 | `V2__journey_checkout_and_planned_activity_snapshot.sql` | Evolução idempotente: `duration_seconds`, `summary`, `snapshot_planned_activity_id`, `planned_activity_id` nullable |
+| `V3__managers.sql` | Tabela `managers` |
+| `V4__rpa_records.sql` | Tabela `rpa_records` (importações do portal externo via RPA; equiv. `registros_rpa` do PDF) |
 
 Configuração (`application.yml`):
 
@@ -101,7 +104,7 @@ A autenticação é **stateless via JWT** (HS256, biblioteca `jjwt`):
 4. Em requests subsequentes, o cliente envia o token no header `Authorization: Bearer <token>`.
 5. O `JwtAuthenticationFilter` valida o token a cada request e popula o `SecurityContext` com o `UserDetails`.
 
-Endpoints públicos (sem token): `POST /v1/auth/login`, `/health`, Swagger UI/JSON. Qualquer outro endpoint exige token JWT válido — sem token ou com token inválido retorna **401**; com role insuficiente retorna **403**.
+Endpoints públicos (sem JWT): `POST /v1/auth/login`, `POST /v1/rpa/imports` (com header `X-Rpa-Api-Key`), `/health`, Swagger UI/JSON. Demais endpoints exigem token JWT válido — sem token ou com token inválido retorna **401**; com role insuficiente retorna **403**.
 
 ### Endpoints de autenticação
 
@@ -149,6 +152,7 @@ Resposta esperada (campos em *snake_case*): `{"user_id":1,"first_name":"Natanael
 | GET    | `/v1/manager/journeys`                | Bearer | MANAGER  | Lista jornadas no período, com filtro opcional por nome (200)             |
 | GET    | `/v1/manager/journeys/{id}`           | Bearer | MANAGER  | Detalhe da jornada com atividades (200)                                   |
 | GET    | `/v1/manager/reports/consolidated`    | Bearer | MANAGER  | Relatório consolidado: indicadores globais + tabela por colaborador (200) |
+| GET    | `/v1/manager/rpa/records`             | Bearer | MANAGER  | Lista registros importados via RPA, paginada (200)                        |
 
 Usuário sem linha em `managers` em `GET /v1/manager` retorna **404** (`ProblemDetail`, título `Gerente não encontrado`). Endpoints de colaboradores e jornadas com token de role `COLLABORATOR` retornam **403**.
 
@@ -527,6 +531,78 @@ curl -X POST http://localhost:8080/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"gerente","password":"87654321"}'
 ```
+
+#### Registros RPA (importação do portal externo)
+
+Batidas de ponto coletadas pelo robô Python no **Portal Ponto Ágil** (ou mock) são persistidas em `rpa_records` — separadas das jornadas criadas no app (`journeys`). Equivalência com o requisito do PDF: tabela `registros_rpa`.
+
+| Método | Endpoint                 | Auth                         | Role    | Descrição                                      |
+|--------|--------------------------|------------------------------|---------|------------------------------------------------|
+| POST   | `/v1/rpa/imports`        | `X-Rpa-Api-Key` (`RPA_API_KEY`) | —   | Importa lote de registros (201)                |
+| GET    | `/v1/manager/rpa/records`| Bearer                       | MANAGER | Lista importações paginada no período (200)    |
+
+**Importação (simula o robô RPA):**
+
+```bash
+curl -X POST http://localhost:8080/v1/rpa/imports \
+  -H "Content-Type: application/json" \
+  -H "X-Rpa-Api-Key: troque-esta-chave-rpa-em-producao" \
+  -d '{
+    "source_system": "ponto_agil",
+    "records": [
+      {
+        "external_employee_id": "001",
+        "employee_name": "Natanael",
+        "work_date": "2026-05-18",
+        "check_in_at": "2026-05-18T08:00:00-03:00",
+        "check_out_at": "2026-05-18T17:00:00-03:00",
+        "raw_payload": { "portal_row": 1 }
+      }
+    ]
+  }'
+```
+
+Resposta esperada (201): `{"imported_count":1,"ids":[1]}`
+
+API key ausente ou inválida retorna **401**. Payload inválido retorna **400**; `check_out_at` anterior a `check_in_at` retorna **400**.
+
+O backend calcula `worked_seconds` quando não informado (diferença entre entrada e saída). Tenta vincular `collaborator_id` pelo `employee_name` (match case-insensitive com `colaborators.first_name`).
+
+**Listagem para o gestor:**
+
+| Query         | Obrigatório | Default | Descrição                                      |
+|---------------|-------------|---------|------------------------------------------------|
+| `start_date`  | não         | hoje    | Início do período (`YYYY-MM-DD`)               |
+| `end_date`    | não         | hoje    | Fim do período (`YYYY-MM-DD`)                  |
+| `search`      | não         | —       | Filtro parcial por `employee_name`             |
+| `page`        | não         | `0`     | Página (0-based)                               |
+| `size`        | não         | `20`    | Itens por página                               |
+
+```bash
+curl "http://localhost:8080/v1/manager/rpa/records?start_date=2026-05-01&end_date=2026-05-18&page=0&size=20" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Resposta esperada (200) — item em `content`:
+
+```json
+{
+  "id": 1,
+  "source_system": "ponto_agil",
+  "external_employee_id": "001",
+  "employee_name": "Natanael",
+  "work_date": "2026-05-18",
+  "check_in_at": "2026-05-18T08:00:00-03:00",
+  "check_out_at": "2026-05-18T17:00:00-03:00",
+  "worked_seconds": 32400,
+  "raw_payload": { "portal_row": 1 },
+  "imported_at": "2026-05-18T14:30:00-03:00",
+  "collaborator_id": 1,
+  "collaborator_first_name": "Natanael"
+}
+```
+
+`collaborator_id` e `collaborator_first_name` vêm `null` quando não há match com colaborador cadastrado.
 
 ### Endpoints de atividades planejadas
 

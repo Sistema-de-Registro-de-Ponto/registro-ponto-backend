@@ -54,6 +54,8 @@ app:
     jwt:
       secret: ${JWT_SECRET:troque-este-segredo-em-producao-precisa-de-pelo-menos-256-bits-para-HS256}
       expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    rpa:
+      api-key: ${RPA_API_KEY:registro_ponto_api_key}
 
 logging:
   level:

@@ -1,16 +1,19 @@
-# Perfil local/dev: ativa seed de demonstração de colaboradores.
-# Uso: mvn spring-boot:run -Dspring-boot.run.profiles=local
-# ou: APP_SEED_COLLABORATOR_DEMO=true mvn spring-boot:run
-app:
-  seed:
-    collaborator-demo:
-      enabled: true
-      collaborators:
-        - username: natan
-          first-name: Natan
-          anchor-date: 2026-05-16
-          journey-count: 60
-        - username: thais
-          first-name: Thais
-          month-only: true
+# Perfil local/dev: ativa seed de demonstração de colaboradores.
+# Uso: mvn spring-boot:run -Dspring-boot.run.profiles=local
+# ou: APP_SEED_COLLABORATOR_DEMO=true mvn spring-boot:run
+app:
+  security:
+    rpa:
+      api-key: ${RPA_API_KEY:local-rpa-dev-key}
+  seed:
+    collaborator-demo:
+      enabled: true
+      collaborators:
+        - username: natan
+          first-name: Natan
+          anchor-date: 2026-05-16
+          journey-count: 60
+        - username: thais
+          first-name: Thais
+          month-only: true
 

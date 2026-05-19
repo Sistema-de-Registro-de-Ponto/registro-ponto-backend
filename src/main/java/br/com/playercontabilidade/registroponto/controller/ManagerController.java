@@ -7,11 +7,13 @@ import br.com.playercontabilidade.registroponto.dto.ManagerJourneyDetailResponse
 import br.com.playercontabilidade.registroponto.dto.ManagerJourneyListItemResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerOverviewResponse;
 import br.com.playercontabilidade.registroponto.dto.ManagerProfileResponse;
+import br.com.playercontabilidade.registroponto.dto.RpaRecordResponse;
 import br.com.playercontabilidade.registroponto.service.JourneyService;
 import br.com.playercontabilidade.registroponto.service.ManagerCollaboratorsService;
 import br.com.playercontabilidade.registroponto.service.ManagerConsolidatedReportService;
 import br.com.playercontabilidade.registroponto.service.ManagerJourneysService;
 import br.com.playercontabilidade.registroponto.service.ManagerOverviewService;
+import br.com.playercontabilidade.registroponto.service.ManagerRpaRecordsService;
 import br.com.playercontabilidade.registroponto.service.ManagerService;
 import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,6 +46,7 @@ public class ManagerController {
     private final ManagerCollaboratorsService managerCollaboratorsService;
     private final ManagerJourneysService managerJourneysService;
     private final ManagerConsolidatedReportService managerConsolidatedReportService;
+    private final ManagerRpaRecordsService managerRpaRecordsService;
 
     @GetMapping("/manager")
     @Operation(
@@ -163,5 +166,28 @@ public class ManagerController {
     @SecurityRequirement(name = "bearerAuth")
     public ManagerJourneyDetailResponse getJourney(@PathVariable Long id) {
         return managerJourneysService.getById(id);
+    }
+
+    @GetMapping("/manager/rpa/records")
+    @PreAuthorize("hasRole('MANAGER')")
+    @Operation(
+            summary = "Lista registros importados via RPA",
+            description = """
+                    Retorna batidas de ponto espelhadas do portal externo (Ponto Ágil ou mock).
+                    Sem datas, utiliza o dia atual no fuso da aplicação.
+                    Filtro opcional por nome do colaborador no portal (contains, case-insensitive).
+                    """
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public Page<RpaRecordResponse> listRpaRecords(
+            @RequestParam(value = "start_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(value = "end_date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(required = false) @Min(1) Integer size) {
+        int pageSize = size != null ? size : JourneyService.DEFAULT_PAGE_SIZE;
+        return managerRpaRecordsService.list(startDate, endDate, search, page, pageSize);
     }
 }

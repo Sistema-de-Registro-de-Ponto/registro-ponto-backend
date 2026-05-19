@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS rpa_records (
+    id                    BIGINT       NOT NULL AUTO_INCREMENT,
+    source_system         VARCHAR(64)  NOT NULL,
+    external_employee_id  VARCHAR(120) NULL,
+    employee_name         VARCHAR(200) NOT NULL,
+    work_date             DATE         NOT NULL,
+    check_in_at           DATETIME(6)  NOT NULL,
+    check_out_at          DATETIME(6)  NULL,
+    worked_seconds        BIGINT       NULL,
+    raw_payload           JSON         NULL,
+    imported_at           DATETIME(6)  NOT NULL,
+    collaborator_id       BIGINT       NULL,
+    created_at            DATETIME(6)  NOT NULL,
+    updated_at            DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_rpa_records_work_date (work_date),
+    KEY idx_rpa_records_imported_at (imported_at),
+    KEY idx_rpa_records_collaborator (collaborator_id),
+    CONSTRAINT fk_rpa_records_collaborator FOREIGN KEY (collaborator_id) REFERENCES colaborators (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -17,6 +17,8 @@ public interface ColaboratorRepository extends JpaRepository<Colaborator, Long> 
 
     Optional<Colaborator> findByUser_Username(String username);
 
+    Optional<Colaborator> findFirstByFirstNameIgnoreCaseAndUser_Role(String firstName, Role role);
+
     boolean existsByUser_Id(Long userId);
 
     Optional<Colaborator> findByIdAndUser_Role(Long id, Role role);
