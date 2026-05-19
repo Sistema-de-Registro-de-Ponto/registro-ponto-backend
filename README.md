@@ -1,6 +1,32 @@
 # registro-ponto-backend
 
-Backend para registro de ponto — Player Contabilidade.
+Backend para registro de ponto — Player Contabilidade (API REST, Spring Boot, MySQL).
+
+### Repositórios do sistema
+
+| Repositório | Descrição |
+|-------------|-----------|
+| **registro-ponto-backend** (este) | API, regras de negócio, persistência |
+| [registro-ponto-frontend](https://github.com/Sistema-de-Registro-de-Ponto/registro-ponto-frontend) | Flutter Web — colaborador e gestão |
+| [registro-ponto-rpa](https://github.com/Sistema-de-Registro-de-Ponto/registro-ponto-rpa) | Robô Python — importação do Portal Ponto Ágil |
+
+### Execução integrada (demo completa com RPA)
+
+Ordem sugerida para validar o fluxo ponta a ponta:
+
+1. **MySQL** acessível com as variáveis `DB_*`.
+2. **Backend** (esta pasta) — com `RPA_API_KEY` definida (ex.: `dev-rpa-key-change-me`, igual ao `.env` do RPA):
+
+   ```powershell
+   $env:RPA_API_KEY="dev-rpa-key-change-me"
+   mvn spring-boot:run
+   ```
+
+3. **Portal mock** — pasta `registro-ponto-rpa`: `py serve_mock.py` (porta `5500`).
+4. **RPA** — pasta `registro-ponto-rpa`: `py main.py` (importa batidas em `rpa_records`).
+5. **Frontend** — pasta `registro-ponto-frontend`: `flutter run -d chrome` → login `gerente` / `87654321` → aba **RPA**.
+
+Detalhes do robô e do portal mock: README do `registro-ponto-rpa`.
 
 ### Requisitos
 
@@ -27,7 +53,7 @@ Backend para registro de ponto — Player Contabilidade.
 | `JWT_SECRET`        | (valor placeholder — troque em prod) | Segredo HS256 (>= 256 bits)        |
 | `JWT_EXPIRATION_MS` | `86400000`                           | Validade do token (ms)             |
 | `APP_TIME_ZONE`     | `America/Sao_Paulo`                  | Fuso da aplicação (API, Jackson e `AppTimeService`) |
-| `RPA_API_KEY`       | (placeholder — troque em prod)       | Chave do robô RPA no header `X-Rpa-Api-Key` |
+| `RPA_API_KEY`       | `troque-esta-chave-rpa-em-producao`  | Chave do robô RPA no header `X-Rpa-Api-Key`. Em dev local, use o mesmo valor do `.env` do `registro-ponto-rpa` (ex.: `dev-rpa-key-change-me`) |
 
 Datas na API são convertidas via `AppTimeService` (injete em qualquer service). O banco continua em UTC (`Instant`); na resposta JSON o horário sai com offset do fuso configurado (ex.: `-03:00`).
 
@@ -546,7 +572,7 @@ Batidas de ponto coletadas pelo robô Python no **Portal Ponto Ágil** (ou mock)
 ```bash
 curl -X POST http://localhost:8080/v1/rpa/imports \
   -H "Content-Type: application/json" \
-  -H "X-Rpa-Api-Key: troque-esta-chave-rpa-em-producao" \
+  -H "X-Rpa-Api-Key: dev-rpa-key-change-me" \
   -d '{
     "source_system": "ponto_agil",
     "records": [
@@ -869,4 +895,10 @@ mvn test -Dtest=JourneyControllerTest
 mvn test -Dtest=JourneyPlannedActivityControllerTest
 mvn test -Dtest=JourneyUnplannedActivityControllerTest
 mvn test -Dtest=ManagerControllerTest
+mvn test -Dtest=RpaImportControllerTest
+mvn test -Dtest=ManagerRpaControllerTest
 ```
+
+### Compartilhamento (avaliação)
+
+Compartilhe os três repositórios com o usuário GitHub **playercontabilidade** (backend, frontend e RPA).
