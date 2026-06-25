@@ -2,6 +2,18 @@
 
 Backend para registro de ponto — Player Contabilidade (API REST, Spring Boot, MySQL).
 
+> **Visão do sistema completo:** backend + [frontend Flutter](https://github.com/Sistema-de-Registro-de-Ponto/registro-ponto-frontend) + [RPA Python](https://github.com/Sistema-de-Registro-de-Ponto/registro-ponto-rpa). Dois fluxos: jornadas no app e registros importados via RPA.
+
+### Arquitetura do ecossistema
+
+```mermaid
+flowchart TB
+    FW[Flutter Web] -->|JWT| API[Spring Boot API]
+    API --> DB[(MySQL)]
+    RPA[Python RPA] -->|API Key| API
+    PORTAL[Portal Ponto Agil] --> RPA
+```
+
 ### Repositórios do sistema
 
 | Repositório | Descrição |
